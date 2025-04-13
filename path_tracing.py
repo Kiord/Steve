@@ -36,15 +36,15 @@ def spatial_random(i: ti.i32, j: ti.i32, b: ti.i32, s: ti.i32) -> ti.f32:  # typ
 def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, s: ti.i32, max_depth:int, buffers: ti.template()): # type:ignore
     throughput = ti.Vector([1.0, 1.0, 1.0])
     result = ti.Vector([0.0, 0.0, 0.0])
-    aux_albedo = ti.Vector([0.0, 0.0, 0.0])
-    aux_normal = ti.Vector([0.0, 0.0, 0.0])
     background = ti.Vector([0.75, 0.75, 0.75])
+    aux_albedo = background
+    aux_normal = ti.Vector([0.0, 0.0, 0.0])
+    
 
     for bounce in range(max_depth):
         hit, rec = hit_scene(scene, ray_o, ray_d, 0.001, 1e5)
         if not hit:
             result += throughput * background
-            aux_albedo = background
             break
 
         mat = scene.materials[rec.material_id]
