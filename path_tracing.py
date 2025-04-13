@@ -108,6 +108,7 @@ class RenderBuffers:
         self.albedo = ti.Vector.field(3, ti.f32, shape=(width, height))
         self.normal = ti.Vector.field(3, ti.f32, shape=(width, height))
         self.denoised = ti.Vector.field(3, ti.f32, shape=(width, height))
+        self.accum_color = ti.Vector.field(3, ti.f32, shape=(width, height))
 
 @ti.func
 def normalize(v):
@@ -197,38 +198,23 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
 
         mat = inter.material
 
-        # Emissive surface on first bounce
-        # if mat.emissive.norm() > 0 and bounce == 0:
-        #     result += (throughput / pdf_total) * mat.emissive
-        if mat.emissive.norm() > 0:
-            result += (throughput / pdf_total) * mat.emissive
-            #break
-
-        # Light sampling only (direct illumination)
+        contrib_color = vec3f(0,0,0)
+        use_emissive = mat.emissive.norm() > 0 and bounce == 0
+        if use_emissive:
+            contrib_color = mat.emissive
         else:
-            light_contrib = sample_light_contrib(scene, inter, sampler)
-            if light_contrib.pdf > 0.0:
-                result += (throughput / pdf_total) * light_contrib.value
+            if mat.emissive.norm() == 0:
+                light_contrib = sample_light_contrib(scene, inter, sampler)
+                contrib_color = light_contrib.value / light_contrib.pdf
+        result += (throughput / pdf_total) * contrib_color
 
-
-        # contrib_color = vec3f(0,0,0)
-        # use_emissive = mat.emissive.norm() > 0 and bounce == 0
-        # if use_emissive:
-        #     contrib_color = mat.emissive
-        # else:
-        #     if mat.emissive.norm() == 0:
-        #         light_contrib = sample_light_contrib(scene, inter, sampler)
-        #         contrib_color = light_contrib.value / light_contrib.pdf
-        # result += (throughput / pdf_total) * contrib_color
-            
-
-        # Russian roulette after a few bounces
-        if bounce > 2:
-            p = max(throughput.x, throughput.y, throughput.z)
-            if sampler.next() > p:
-                break
-            throughput /= p
-            pdf_total *= p
+        # # Russian roulette after a few bounces
+        # if bounce > 2:
+        #     p = max(throughput.x, throughput.y, throughput.z)
+        #     if sampler.next() > p:
+        #         break
+        #     throughput /= p
+        #     pdf_total *= p
 
         # Sample BSDF to get next ray direction (but don't use it for lighting)
         sample = sample_BSDF(inter.normal, mat, ray.direction, sampler)
@@ -252,107 +238,7 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
     buffers.albedo[i, j] += aux_albedo
     buffers.normal[i, j] += aux_normal
 
-# @ti.func
-# def path_trace(scene: ti.template(), ray : Ray, i: ti.i32, j: ti.i32, max_depth: int, sampler: RandomSampler, buffers: ti.template()):  # type: ignore
-#     throughput = ti.Vector([1.0, 1.0, 1.0])
-#     result = ti.Vector([0.0, 0.0, 0.0])
-#     background = ti.Vector([0.75, 0.75, 0.75])
-#     aux_albedo = background
-#     aux_normal = ti.Vector([0.0, 0.0, 0.0])
 
-#     for bounce in range(max_depth):
-#         inter = hit_scene(ray, scene, 0.001, 1e5)
-#         if not inter.hit:
-#             result += throughput * background
-#             break
-
-#         mat = inter.material
-
-#         # Direct light sampling
-#         light_dir = (scene.light[None].position - inter.point).normalized()
-#         light_dist = (scene.light[None].position - inter.point).norm()
-#         inter_light = hit_scene(Ray(inter.point + inter.normal * 1e-3, light_dir), scene, 0.001, light_dist - 1e-2)
-#         if not inter_light.hit:
-#             lambert = max(0.0, inter.normal.dot(light_dir))
-#             light_contrib = (mat.diffuse * lambert + mat.specular) * scene.light[None].color / (light_dist**2)
-#             result += throughput * light_contrib
-
-#         # Sample BSDF
-#         sample = sample_BSDF(inter.normal, mat, ray.direction, sampler)
-
-#         # Russian roulette (optional for >2 bounces)
-#         if bounce > 2:
-#             p = max(throughput.x, throughput.y, throughput.z)
-#             if sampler.next() > p:
-#                 break
-#             throughput /= p
-
-#         if sample.pdf > 0:
-#             throughput *= sample.bsdf / sample.pdf
-#         else:
-#             break
-
-#         ray.origin = inter.point + inter.normal * 1e-4
-#         ray.direction = sample.direction
-
-#         if bounce == 0:
-#             aux_albedo = mat.diffuse
-#             aux_normal = inter.normal
-
-#     buffers.color[i, j] += result
-#     buffers.albedo[i, j] += aux_albedo
-#     buffers.normal[i, j] += aux_normal
-
-# @ti.func
-# def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, max_depth: int, sampler: RandomSampler, buffers: ti.template()):  # type: ignore
-#     throughput = ti.Vector([1.0, 1.0, 1.0])
-#     result = ti.Vector([0.0, 0.0, 0.0])
-#     background = ti.Vector([0.75, 0.75, 0.75])
-#     aux_albedo = background
-#     aux_normal = ti.Vector([0.0, 0.0, 0.0])
-
-#     for bounce in range(max_depth):
-#         hit, rec = hit_scene(scene, ray_o, ray_d, 0.001, 1e5)
-#         if not hit:
-#             result += throughput * background
-#             break
-
-#         mat = scene.materials[rec.material_id]
-
-#         # Direct light sampling
-#         light_dir = (scene.light[None].position - rec.point).normalized()
-#         light_dist = (scene.light[None].position - rec.point).norm()
-#         blocked, _ = hit_scene(scene, rec.point + rec.normal * 1e-3, light_dir, 0.001, light_dist - 1e-2)
-#         if not blocked:
-#             lambert = max(0.0, rec.normal.dot(light_dir))
-#             light_contrib = (mat.diffuse * lambert + mat.specular) * scene.light[None].color / (light_dist**2)
-#             result += throughput * light_contrib
-
-#         # Sample BSDF
-#         sample = sample_BSDF(rec.normal, mat, ray_d, sampler)
-
-#         # Russian roulette (optional for >2 bounces)
-#         if bounce > 2:
-#             p = max(throughput.x, throughput.y, throughput.z)
-#             if sampler.next() > p:
-#                 break
-#             throughput /= p
-
-#         if sample.pdf > 0:
-#             throughput *= sample.bsdf / sample.pdf
-#         else:
-#             break
-
-#         ray_o = rec.point + rec.normal * 1e-4
-#         ray_d = sample.direction
-
-#         if bounce == 0:
-#             aux_albedo = mat.diffuse
-#             aux_normal = rec.normal
-
-#     buffers.color[i, j] += result
-#     buffers.albedo[i, j] += aux_albedo
-#     buffers.normal[i, j] += aux_normal
 
 @ti.kernel
 def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, max_depth: ti.i32, buffers: ti.template(), width: ti.i32, height: ti.i32, frame_idx: ti.i32):# type:ignore

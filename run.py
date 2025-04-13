@@ -24,7 +24,7 @@ def cli(profiling, denoising, no_tone_mapping):
         scene.num_spheres[None] = 16
         for i in range(4):
             for j in range(4):
-                scene.spheres[i * 4 + j] = Sphere(center=ti.Vector([i, 0.7, j]), radius=0.7, material_id=0)
+                scene.spheres[i * 4 + j] = Sphere(center=ti.Vector([i, 0.5, j]), radius=0.5, material_id=0)
                 if i ==1 and j==1:
                     scene.spheres[i * 4 + j].material_id = 1
 
@@ -41,7 +41,7 @@ def cli(profiling, denoising, no_tone_mapping):
                                       emissive=ti.Vector([50.0, 0.0, 0.0]) )
 
         scene.light[None] = PointLight(position=ti.Vector([2, 2, 2]),
-                                       color=ti.Vector([3.0, 3.0, 5.0]))
+                                       color=ti.Vector([0.0, 0.0, 0.0]))
 
     # Set up application state
     state = AppState(width=800, height=600)
