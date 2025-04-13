@@ -1,21 +1,24 @@
 import click
+import taichi as ti
+import threading
+import dearpygui.dearpygui as dpg
+
+from scene import Scene, PointLight, Sphere, Material, Plane
+from camera import Camera
+from path_tracing import render
+from denoising import bilateral_filter
+from tone_mapping import tone_map
+from control import FreeFlyCameraController
+from timer import FrameTimer
+from app_state import AppState
+from ui import build_ui
 
 @click.command()
 @click.option('--profiling', '-p', is_flag=True, default=False, help='Enable Taichi kernel profiling')
-@click.option('--no-denosing', '-nd', is_flag=True, default=False, help='Disable denoising')
+@click.option('--no-denoising', '-nd', is_flag=True, default=False, help='Disable denoising')
 @click.option('--no-tone-mapping', '-ntm', is_flag=True, default=False, help='Disable tone mapping')
-def cli(profiling, no_denosing, no_tone_mapping):
-    import taichi as ti
+def cli(profiling, no_denoising, no_tone_mapping):
     ti.init(arch=ti.gpu, default_fp=ti.f32, kernel_profiler=profiling)
-
-    from scene import Scene, PointLight, Sphere, Material, Plane
-    from camera import Camera
-    from path_tracing import render, RenderBuffers
-    from denoising import bilateral_filter
-    from tone_mapping import tone_map
-    from control import FreeFlyCameraController
-    from timer import FrameTimer
-    
 
     def setup_scene(scene: Scene):
         scene.num_spheres[None] = 1
@@ -24,53 +27,71 @@ def cli(profiling, no_denosing, no_tone_mapping):
         scene.num_planes[None] = 1
         scene.planes[0] = Plane(point=ti.Vector([0, 0, 0]), normal=ti.Vector([0, 1, 0]), material_id=0)
 
-        scene.materials[0] = Material(diffuse=ti.Vector([0.7, 0.7, 0.7]), specular=ti.Vector([0.0, 0.0, 0.0]), shininess=0.0)
-        scene.light[None] = PointLight(position=ti.Vector([1, 1, 0]), color=ti.Vector([1.0, 1.0, 1.0]))
+        scene.materials[0] = Material(diffuse=ti.Vector([0.7, 0.7, 0.7]),
+                                      specular=ti.Vector([0.0, 0.0, 0.0]),
+                                      shininess=0.0)
 
-    width, height = 1200, 800
-    aspect_ratio = width / height
+        scene.light[None] = PointLight(position=ti.Vector([1, 1, 0]),
+                                       color=ti.Vector([1.0, 1.0, 1.0]))
 
-    buffers = RenderBuffers(width, height)
+    # Set up application state
+    state = AppState()
+    state.profiling = profiling
+    state.denoising = not no_denoising
+    state.tone_mapping = not no_tone_mapping
+
     scene = Scene()
+    setup_scene(scene)
 
     camera = Camera.field(shape=())
     camera_controller = FreeFlyCameraController()
-    camera_controller.update_camera_field(camera, aspect_ratio)
+    camera_controller.update_camera_field(camera, state.aspect_ratio)
 
-    setup_scene(scene)
+    build_ui(state)
+    threading.Thread(target=dpg.start_dearpygui, daemon=True).start()
 
-    window = ti.ui.Window("Steve", res=(width, height))
+    window = ti.ui.Window("Steve", res=(state.width, state.height))
     canvas = window.get_canvas()
-    frame_timer = FrameTimer()
+    timer = FrameTimer()
 
-    frame_count = 0
     while window.running:
-        dt = frame_timer.get_dt()
-        camera_controller.update_from_input(window, dt)
-        camera_controller.update_camera_field(camera, aspect_ratio)
 
-        if profiling:
+        
+        dt = timer.get_dt()
+
+        camera_controller.update_from_input(window, dt)
+        camera_controller.update_camera_field(camera, state.aspect_ratio)
+
+        if state.profiling:
             ti.profiler.clear_kernel_profiler_info()
 
-        render(scene, camera, spp=1, buffers=buffers, width=width, height=height)
+        render(scene, camera, spp=state.spp,
+               buffers=state.buffers,
+               width=state.width, height=state.height)
 
-        if not no_denosing:
-            bilateral_filter(buffers, sigma_color=0.2, sigma_normal=0.2, sigma_spatial=1.5, radius=1)
-            if not no_tone_mapping:
-                tone_map(buffers.denoised)
-            canvas.set_image(buffers.denoised)
-        else:
-            if not no_tone_mapping:
-                tone_map(buffers.color)
-            canvas.set_image(buffers.color)
+        final_buffer = state.buffers.color
+
+        if state.denoising:
+            bilateral_filter(state.buffers,
+                             sigma_color=state.sigma_color,
+                             sigma_normal=state.sigma_normal,
+                             sigma_spatial=state.sigma_spatial,
+                             radius=state.radius)
+            final_buffer = state.buffers.denoised
+    
+        if state.tone_mapping:
+            tone_map(final_buffer)
+       
+        canvas.set_image(final_buffer)
 
         window.show()
 
-        if profiling:
+        if state.profiling:
             ti.sync()
             ti.profiler.print_kernel_profiler_info()
 
-        frame_count+= 1
+        state.frame_count += 1
+
 
 if __name__ == "__main__":
     cli()
