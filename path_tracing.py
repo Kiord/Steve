@@ -4,7 +4,9 @@ import math
 from datatypes import vec3f
 from scene import Material, environment_color
 from camera import make_ray
-from utils import Contribution, RandomSampler, sample_BSDF
+from utils import (Contribution, RandomSampler, sample_BSDF, sample_sphere_solid_angle, BSDF, 
+                   sample_sphere_uniform)
+from constants import EPS, MAX_DIST
 
 class RenderBuffers:
     def __init__(self, width:int, height:int):
@@ -36,25 +38,35 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
 
 @ti.func
 def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> Contribution:  # type: ignore
-    contrib = vec3f(0.0, 0.0, 0.0)
-    pdf = 1.0  # point light: no solid angle distribution
+    
+    u = sampler.next()
+    light_sphere_id = min(int(u * scene.num_light_spheres[None]), scene.num_light_spheres[None]-1)
+    light_sphere = scene.spheres[scene.light_spheres_id[light_sphere_id]]
+    light_color = scene.materials[light_sphere.material_id].emissive;
+    
+    #sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
+    sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
+    
+    pdf = sls.pdf / scene.num_light_spheres[None]
 
-    light_pos = scene.light[None].position
-    light_dir = (light_pos - inter.point).normalized()
-    light_dist = (light_pos - inter.point).norm()
-    ray = Ray(inter.point + light_dir * 10e-3, light_dir)
+    point_to_sample = sls.point - inter.point
+    dist = point_to_sample.norm()
+    point_to_sample /= dist 
+    bsdf = BSDF(inter, -inter.ray.direction, point_to_sample)
 
-    blocked = hit_scene(ray, scene, 0.001, light_dist - 1e-2).hit
+    cosi = abs(inter.normal.dot(point_to_sample))
+    prod = bsdf * cosi
 
-    if blocked == 0:
-        mat = inter.material
-        lambert = max(0.0, inter.normal.dot(light_dir))
-        light_contrib = (mat.diffuse * lambert + mat.specular) * scene.light[None].color / (light_dist * light_dist)
+    value = vec3f(0.0)
 
-        contrib = light_contrib
-        pdf = 1.0  # point light assumed to be sampled directly (one light → uniform)
+    if prod.norm() > 0.0:
+        ray_light = Ray(inter.point, point_to_sample)
+        inter_light = hit_scene(ray_light, scene, EPS, dist-EPS)
+        v =  1#float(inter_light.hit == 0)
 
-    return Contribution(contrib, pdf)
+        value = v * light_color * prod
+
+    return Contribution(value, pdf)
 
 @ti.func
 def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: int, sampler: RandomSampler, buffers: ti.template()):  # type: ignore
@@ -65,7 +77,7 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
     aux_normal = ti.Vector([0.0, 0.0, 0.0])
 
     for bounce in range(max_depth):
-        inter = hit_scene(ray, scene, 0.001, 1e5)
+        inter = hit_scene(ray, scene, EPS, MAX_DIST)
 
         if not inter.hit:
             env_color = environment_color(ray.direction, scene)
@@ -76,15 +88,18 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
 
         mat = inter.material
 
-        contrib_color = vec3f(0,0,0)
+        light_contrib_color = vec3f(0,0,0)
         use_emissive = mat.emissive.norm() > 0 and bounce == 0
         if use_emissive:
-            contrib_color = mat.emissive
-        # else:
-        #     if mat.emissive.norm() == 0:
-        #         light_contrib = sample_light_contrib(scene, inter, sampler)
-        #         contrib_color = light_contrib.value / light_contrib.pdf
-        result += (throughput / pdf_total) * contrib_color
+            light_contrib_color = mat.emissive
+        else:
+            if mat.emissive.norm() == 0:
+                light_contrib = sample_light_contrib(scene, inter, sampler)
+                light_contrib_color = light_contrib.value / light_contrib.pdf
+        
+        result += (throughput / pdf_total) * light_contrib_color
+
+
 
         # # Russian roulette after a few bounces
         # if bounce > 2:
@@ -94,19 +109,15 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
         #     throughput /= p
         #     pdf_total *= p
 
-        # Sample BSDF to get next ray direction (but don't use it for lighting)
-        sample = sample_BSDF(inter.normal, mat, ray.direction, sampler)
+        ds = sample_BSDF(inter.normal, mat, ray.direction, sampler)
 
-        if sample.pdf > 0:
-            cos_theta = max(0.0, inter.normal.dot(sample.direction))
-            throughput *= sample.bsdf * cos_theta
-            pdf_total *= sample.pdf
-        else:
-            break
+        cos_theta = max(0.0, inter.normal.dot(ds.direction))
+        throughput *= ds.bsdf * cos_theta
+        pdf_total *= ds.pdf
 
         # Update ray
-        ray.origin = inter.point + sample.direction * 1e-4
-        ray.direction = sample.direction
+        ray.origin = inter.point + ds.direction * 1e-4
+        ray.direction = ds.direction
 
         if bounce == 0:
             aux_albedo = mat.diffuse

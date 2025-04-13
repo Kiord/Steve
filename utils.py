@@ -1,6 +1,6 @@
 import taichi as ti
 from datatypes import vec3f
-from scene import Material
+from scene import Material, Sphere
 import math
 
 @ti.dataclass
@@ -94,6 +94,7 @@ def sample_BSDF(normal: vec3f, material:Material, incoming_dir: vec3f, sampler: 
 
     return sampled
 
+
 @ti.func
 def BSDF(inter, wi, wo):
     n = inter.material.shininess
@@ -101,10 +102,10 @@ def BSDF(inter, wi, wo):
     coswi = inter.normal.dot(wi)
     r = ti.select(is_lambert, inter.normal, reflect(wo, inter.normal))
     cosr = r.dot(wi)
-    coswo = ti.clamp(inter.normal.dot(wo), -1.0, 1.0)
+    coswo = max(min(inter.normal.dot(wo), 1.0), -1)
     ok = (coswi > 0.0) and (cosr > 0.0) and (coswo > 0.0)
     factor = (n + 1.0 + ti.cast(is_lambert, ti.f32)) / (2.0 * math.pi)
-    return ti.select(ok, inter.material.albedo * factor * cosr ** n, ti.Vector([0.0, 0.0, 0.0]))
+    return ti.select(ok, inter.material.diffuse * factor * cosr ** n, ti.Vector([0.0, 0.0, 0.0]))
 
 
 @ti.func
@@ -129,3 +130,76 @@ class LightSample:
     direction: vec3f
     contrib: vec3f
     pdf: ti.f32
+
+@ti.dataclass
+class SurfaceLightSample:
+    pdf: ti.f32
+    point: vec3f
+    normal: vec3f
+
+@ti.func
+def copysign(x: ti.f32, sign_source: ti.f32) -> ti.f32:
+    return ti.select(sign_source >= 0.0, ti.abs(x), -ti.abs(x))
+
+@ti.func
+def sample_sphere_solid_angle(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:
+    sls = SurfaceLightSample(pdf=0.0, point=vec3f(0.0), normal=vec3f(0.0))
+
+    main_dir = viewer - sphere.center
+    d = main_dir.norm()
+    main_dir = main_dir / d
+    d2 = d * d
+    sintheta_max = sphere.radius / d
+    costheta_max = ti.sqrt(1.0 - sintheta_max * sintheta_max)
+
+    costheta = 1.0 - sampler.next() * (1.0 - costheta_max)
+    sintheta = ti.sqrt(1.0 - costheta * costheta)
+    phi = 2.0 * math.pi * sampler.next()
+
+    sintheta2 = sintheta * sintheta
+    D = 1.0 - d2 * sintheta2 / (sphere.radius * sphere.radius)
+    D_positive = D > 0.0
+
+    cos_alpha = ti.select(D_positive,
+                          sintheta2 / sintheta_max + costheta * ti.sqrt(ti.abs(D)),
+                          sintheta_max)
+    sin_alpha = ti.sqrt(1.0 - cos_alpha * cos_alpha)
+
+    local_dir = vec3f(ti.cos(phi) * sin_alpha,
+                      ti.sin(phi) * sin_alpha,
+                      cos_alpha)
+
+    if ti.abs(main_dir.z) > 0.99999:
+        sls.normal = local_dir * copysign(1.0, main_dir.z)
+    else:
+        axis = main_dir.cross(vec3f(0.0, 0.0, 1.0)).normalized()
+        angle = ti.acos(main_dir.z)
+        sls.normal = rotate(axis, angle, local_dir)
+
+    sls.point = sphere.center + sls.normal * sphere.radius
+    sls.pdf = 1.0 / (2.0 * math.pi * (1.0 - costheta_max))
+
+    return sls
+
+@ti.func
+def sample_sphere_uniform(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:
+    sls = SurfaceLightSample(pdf=0.0, point=vec3f(0.0), normal=vec3f(0.0))
+
+    ksi_x = sampler.next()
+    ksi_y = sampler.next()
+
+    polar = ti.acos(1.0 - 2.0 * ksi_x)
+    azimuth = 2.0 * math.pi * ksi_y
+
+    sin_polar = ti.sin(polar)
+    sls.normal = vec3f(
+        sin_polar * ti.cos(azimuth),
+        sin_polar * ti.sin(azimuth),
+        ti.cos(polar)
+    )
+
+    sls.point = sphere.center + sphere.radius * sls.normal
+    sls.pdf = 1.0 / (4.0 * math.pi * sphere.radius * sphere.radius)
+
+    return sls
+

@@ -1,6 +1,7 @@
 import taichi as ti
 from scene import Scene, Sphere, Plane, Material
 from datatypes import vec3f
+from constants import EPS, MAX_DIST
 
 @ti.dataclass
 class Ray:
@@ -15,7 +16,9 @@ class Intersection:
     normal: vec3f # type:ignore
     t: ti.f32 # type:ignore
     front_face: ti.i32 # type:ignore
-    material_id: ti.i32 # type:ignore 
+    material_id: ti.i32 # type:ignore
+    primitive_type:ti.i32 # type:ignore 0 sphere 1 plane
+    primitive_id : ti.i32 # type:ignore
     material: Material 
     ray: Ray         
 
@@ -25,7 +28,7 @@ def empty_intersection() -> Intersection:
         hit=0,
         point=vec3f(0.0, 0.0, 0.0),
         normal=vec3f(0.0, 0.0, 0.0),
-        t=1e6,
+        t=MAX_DIST,
         front_face=1,
         material_id=-1,
         material=Material(  # use defaults from your Material dataclass
@@ -65,6 +68,7 @@ def hit_sphere(ray: Ray, sphere: Sphere, t_min, t_max):
             inter.hit = 1
 
     return inter
+
 
 @ti.func
 def hit_plane(ray : Ray, plane: Plane, t_min, t_max):
@@ -107,3 +111,4 @@ def hit_scene(ray:Ray, scene: ti.template(), t_min, t_max): # type: ignore
         final_inter.material = scene.materials[final_inter.material_id]
 
     return final_inter
+

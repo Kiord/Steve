@@ -5,9 +5,9 @@ from camera import compute_camera_vectors
 
 class FreeFlyCameraController:
     def __init__(self, pos=np.array([2.0, 2.0, 2.0], dtype=np.float32),
-                 yaw=-135.0, pitch=-20.0, move_speed=1.0, turn_speed=90.0,
+                 yaw=-135.0, pitch=-45.0, move_speed=1.0, turn_speed=90.0,
                  fov=60):
-        self.pos = pos
+        self.pos = np.asanyarray(pos)
         self.yaw = yaw
         self.pitch = pitch
         self.move_speed = move_speed
@@ -26,7 +26,9 @@ class FreeFlyCameraController:
         forward /= np.linalg.norm(forward)
 
         right = np.cross(forward, np.array([0, 1, 0], dtype=np.float32))
+        right = right / np.linalg.norm(right)
         up = np.cross(right, forward)
+        up = up / np.linalg.norm(up)
 
         return forward, right, up
 
