@@ -1,6 +1,7 @@
 import taichi as ti
 from datatypes import vec3f
 from constants import *
+import numpy as np
 
 @ti.dataclass
 class Material:
@@ -36,4 +37,63 @@ class Scene:
         self.num_planes = ti.field(dtype=ti.i32, shape=())
         self.planes = Plane.field(shape=MAX_PLANES)
         self.materials = Material.field(shape=MAX_MATERIALS)
-        self.light = PointLight.field(shape=())
+        self.num_light_spheres = ti.field(dtype=ti.i32, shape=())
+        self.light_spheres_id = ti.field(dtype=ti.i32, shape=MAX_SPHERES)
+
+        self.ground_color = ti.Vector.field(3, dtype=ti.f32, shape=())
+        self.horizon_color = ti.Vector.field(3, dtype=ti.f32, shape=())
+        self.sky_color = ti.Vector.field(3, dtype=ti.f32, shape=())
+        self.ground_color[None] = ti.Vector([0.2, 0.1, 0.1])
+        self.horizon_color[None] = ti.Vector([0.6, 0.5, 0.5])
+        self.sky_color[None] = ti.Vector([0.3, 0.5, 0.8])
+
+        self.sun_direction = ti.Vector.field(3, dtype=ti.f32, shape=())
+        self.sun_color = ti.Vector.field(3, dtype=ti.f32, shape=())
+        self.sun_size = ti.field(dtype=ti.f32, shape=())
+
+        # Default values
+        self.sun_direction[None] = vec3f(0.0, 1.0, 0.0).normalized()  # overhead
+        self.sun_color[None] = vec3f(5.0, 4.5, 3.0)  # warm bright sun
+        self.sun_size[None] = 0.01  # sharpness of falloff (lower = smaller sun)
+    
+    def add_sphere(self, center:np.ndarray, radius:float, material_id:int):
+        idx = self.num_spheres[None]
+        self.num_spheres[None] += 1
+        self.spheres[idx] = Sphere(ti.Vector(list(center)), radius, material_id)
+        if self.materials[material_id].emissive.norm() > 0.0:
+            light_idx = self.num_light_spheres[None]
+            self.num_light_spheres[None] += 1
+            self.light_spheres_id[light_idx] = idx
+        
+    def add_plane(self, point:np.ndarray, normal:np.ndarray, material_id:int):
+        idx = self.num_planes[None]
+        self.num_planes[None] += 1
+        self.planes[idx] =  Plane(point=ti.Vector(list(point)), normal=ti.Vector(list(normal)), material_id=material_id)
+        if self.materials[material_id].emissive.norm() > 0.0:
+            print("[Warning] Emissive plane light not handled.")
+
+@ti.func
+def environment_color(view_dir: vec3f, scene:ti.template()) -> vec3f: # type: ignore
+    ground_color = scene.ground_color[None]
+    horizon_color = scene.horizon_color[None]
+    sky_color = scene.sky_color[None]
+    sun_dir = scene.sun_direction[None]
+    sun_col = scene.sun_color[None]
+    sun_size = scene.sun_size[None]
+
+    t = 0.5 * (view_dir.y + 1.0)  # remap from [-1, 1] to [0, 1]
+    t = ti.min(ti.max(t, 0.0), 1.0)  # clamp
+
+    # Blend top and bottom through horizon
+    base = vec3f(0.0,0.0,0.0)
+    if t < 0.5:
+        # from ground to horizon
+        base = (1.0 - t * 2.0) * ground_color + (t * 2.0) * horizon_color
+    else:
+        # from horizon to sky
+        base = (1.0 - (t - 0.5) * 2.0) * horizon_color + ((t - 0.5) * 2.0) * sky_color
+
+    cos_angle = view_dir.dot(sun_dir)
+    glow = ti.exp((cos_angle - 1.0) / ti.max(sun_size, 1e-4))  # sharper peak = smaller sun
+    sun = sun_col * glow
+    return base + sun

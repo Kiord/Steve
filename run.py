@@ -33,16 +33,6 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth):
     
 
     def setup_scene(scene: Scene):
-        scene.num_spheres[None] = 16
-        for i in range(4):
-            for j in range(4):
-                scene.spheres[i * 4 + j] = Sphere(center=ti.Vector([i, 0.5, j]), radius=0.5, material_id=0)
-                if i ==1 and j==1:
-                    scene.spheres[i * 4 + j].material_id = 1
-
-        scene.num_planes[None] = 1
-        scene.planes[0] = Plane(point=ti.Vector([0, 0, 0]), normal=ti.Vector([0, 1, 0]), material_id=0)
-
         scene.materials[0] = Material(diffuse=ti.Vector([0.7, 0.7, 0.7]),
                                       specular=ti.Vector([0.0, 0.0, 0.0]),
                                       shininess=0.0,
@@ -50,13 +40,13 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth):
         scene.materials[1] = Material(diffuse=ti.Vector([0.7, 0.7, 0.7]),
                                       specular=ti.Vector([0.0, 0.0, 0.0]),
                                       shininess=0.0,
-                                      emissive=ti.Vector([50.0, 0.0, 0.0]) )
+                                      emissive=ti.Vector([5.0, 0.0, 0.0]) )
 
-        scene.light[None] = PointLight(position=ti.Vector([2, 2, 2]),
-                                       color=ti.Vector([0.0, 0.0, 0.0]))
+        for i in range(4):
+            for j in range(4):
+                scene.add_sphere([i, 0.5, j], 0.5, int(i==1 and j==1))
 
-    # Set up application state
-    
+        scene.add_plane([0,0,0], [0,1,0], 0)
 
     scene = Scene()
     setup_scene(scene)
