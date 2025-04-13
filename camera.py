@@ -1,7 +1,7 @@
 import taichi as ti
 import math
 import numpy as np
-
+from ray import Ray
 from datatypes import vec3f
 
 @ti.dataclass
@@ -11,6 +11,12 @@ class Camera:
     horizontal: vec3f # type: ignore
     vertical: vec3f # type: ignore
 
+
+@ti.func
+def make_ray(cam: Camera, u: ti.f32, v: ti.f32) -> Ray: #type:ignore
+    ray_o = cam.origin
+    ray_d = (cam.lower_left_corner + u * cam.horizontal + v * cam.vertical - cam.origin).normalized()
+    return Ray(ray_o, ray_d)
 
 def compute_camera_vectors(
         origin : np.ndarray,

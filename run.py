@@ -18,7 +18,7 @@ from ui import build_ui
 @click.option('--denoising', '-d', is_flag=True, default=False, help='Enable denoising')
 @click.option('--no-tone-mapping', '-ntm', is_flag=True, default=False, help='Disable tone mapping')
 def cli(profiling, denoising, no_tone_mapping):
-    ti.init(arch=ti.gpu, default_fp=ti.f32, kernel_profiler=profiling)
+    ti.init(arch=ti.cpu, default_fp=ti.f32, kernel_profiler=profiling)
 
     def setup_scene(scene: Scene):
         scene.num_spheres[None] = 16
@@ -37,7 +37,7 @@ def cli(profiling, denoising, no_tone_mapping):
                                        color=ti.Vector([3.0, 3.0, 5.0]))
 
     # Set up application state
-    state = AppState()
+    state = AppState(width=256, height=256)
     state.profiling = profiling
     state.denoising = denoising
     state.tone_mapping = not no_tone_mapping

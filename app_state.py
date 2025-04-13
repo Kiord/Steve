@@ -6,10 +6,10 @@ class AppState:
         self.height = height
         self.aspect_ratio = width / height
         self.profiling = False
-        self.denoising = True
+        self.denoising = False
         self.tone_mapping = True
         self.spp = 1
-        self.max_depth = 5
+        self.max_depth = 3
         self.radius = 2
         self.sigma_color = 0.2
         self.sigma_normal = 0.2
