@@ -15,9 +15,9 @@ from ui import build_ui
 
 @click.command()
 @click.option('--profiling', '-p', is_flag=True, default=False, help='Enable Taichi kernel profiling')
-@click.option('--no-denoising', '-nd', is_flag=True, default=False, help='Disable denoising')
+@click.option('--denoising', '-d', is_flag=True, default=False, help='Enable denoising')
 @click.option('--no-tone-mapping', '-ntm', is_flag=True, default=False, help='Disable tone mapping')
-def cli(profiling, no_denoising, no_tone_mapping):
+def cli(profiling, denoising, no_tone_mapping):
     ti.init(arch=ti.gpu, default_fp=ti.f32, kernel_profiler=profiling)
 
     def setup_scene(scene: Scene):
@@ -37,7 +37,7 @@ def cli(profiling, no_denoising, no_tone_mapping):
     # Set up application state
     state = AppState()
     state.profiling = profiling
-    state.denoising = not no_denoising
+    state.denoising = denoising
     state.tone_mapping = not no_tone_mapping
 
     scene = Scene()
@@ -55,7 +55,6 @@ def cli(profiling, no_denoising, no_tone_mapping):
     timer = FrameTimer()
 
     while window.running:
-
         
         dt = timer.get_dt()
 
