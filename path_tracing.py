@@ -143,24 +143,24 @@ def path_trace(scene: ti.template(), ray : Ray, i: ti.i32, j: ti.i32, max_depth:
     aux_normal = ti.Vector([0.0, 0.0, 0.0])
 
     for bounce in range(max_depth):
-        hit, rec = hit_scene(ray, scene, 0.001, 1e5)
-        if not hit:
+        inter = hit_scene(ray, scene, 0.001, 1e5)
+        if not inter.hit:
             result += throughput * background
             break
 
-        mat = scene.materials[rec.material_id]
+        mat = inter.material
 
         # Direct light sampling
-        light_dir = (scene.light[None].position - rec.point).normalized()
-        light_dist = (scene.light[None].position - rec.point).norm()
-        blocked, _ = hit_scene(Ray(rec.point + rec.normal * 1e-3, light_dir), scene, 0.001, light_dist - 1e-2)
-        if not blocked:
-            lambert = max(0.0, rec.normal.dot(light_dir))
+        light_dir = (scene.light[None].position - inter.point).normalized()
+        light_dist = (scene.light[None].position - inter.point).norm()
+        inter_light = hit_scene(Ray(inter.point + inter.normal * 1e-3, light_dir), scene, 0.001, light_dist - 1e-2)
+        if not inter_light.hit:
+            lambert = max(0.0, inter.normal.dot(light_dir))
             light_contrib = (mat.diffuse * lambert + mat.specular) * scene.light[None].color / (light_dist**2)
             result += throughput * light_contrib
 
         # Sample BSDF
-        sample = sample_BSDF(rec.normal, mat, ray.direction, sampler)
+        sample = sample_BSDF(inter.normal, mat, ray.direction, sampler)
 
         # Russian roulette (optional for >2 bounces)
         if bounce > 2:
@@ -174,12 +174,12 @@ def path_trace(scene: ti.template(), ray : Ray, i: ti.i32, j: ti.i32, max_depth:
         else:
             break
 
-        ray.origin = rec.point + rec.normal * 1e-4
+        ray.origin = inter.point + inter.normal * 1e-4
         ray.direction = sample.direction
 
         if bounce == 0:
             aux_albedo = mat.diffuse
-            aux_normal = rec.normal
+            aux_normal = inter.normal
 
     buffers.color[i, j] += result
     buffers.albedo[i, j] += aux_albedo
