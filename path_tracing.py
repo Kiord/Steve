@@ -1,5 +1,4 @@
 import taichi as ti
-from constants import MAX_DEPTH
 from ray import hit_scene
 import math
 
@@ -34,14 +33,14 @@ def spatial_random(i: ti.i32, j: ti.i32, b: ti.i32, s: ti.i32) -> ti.f32:  # typ
     return (hash_int(seed) & ti.u32(0xFFFFFF)) / 16777216.0
 
 @ti.func
-def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, s: ti.i32, buffers: ti.template()): # type:ignore
+def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, s: ti.i32, max_depth:int, buffers: ti.template()): # type:ignore
     throughput = ti.Vector([1.0, 1.0, 1.0])
     result = ti.Vector([0.0, 0.0, 0.0])
     aux_albedo = ti.Vector([0.0, 0.0, 0.0])
     aux_normal = ti.Vector([0.0, 0.0, 0.0])
     background = ti.Vector([0.75, 0.75, 0.75])
 
-    for bounce in range(MAX_DEPTH):
+    for bounce in range(max_depth):
         hit, rec = hit_scene(scene, ray_o, ray_d, 0.001, 1e5)
         if not hit:
             result += throughput * background
@@ -95,7 +94,7 @@ def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, s: ti.i
     buffers.normal[i, j] += aux_normal
 
 @ti.kernel
-def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, buffers: ti.template(), width: ti.i32, height: ti.i32): # type: ignore
+def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, max_depth:ti.int32, buffers: ti.template(), width: ti.i32, height: ti.i32): # type: ignore
     for i, j in buffers.color:
         buffers.color[i, j] = ti.Vector([0.0, 0.0, 0.0])
         buffers.albedo[i, j] = ti.Vector([0.0, 0.0, 0.0])
@@ -109,7 +108,7 @@ def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, buffers: ti
                 camera[None].lower_left_corner + u * camera[None].horizontal + v * camera[None].vertical
                 - camera[None].origin
             )
-            path_trace(scene, ray_o, ray_d, i, j, s, buffers)
+            path_trace(scene, ray_o, ray_d, i, j, s, max_depth, buffers)
 
         # Final averaging
         buffers.color[i, j] /= spp

@@ -12,6 +12,9 @@ def build_ui(state):
 
         dpg.add_slider_int(label="SPP", default_value=state.spp, min_value=1, max_value=64,
                            callback=lambda s: setattr(state, "spp", dpg.get_value(s)))
+        
+        dpg.add_slider_int(label="Max Depth", default_value=state.max_depth, min_value=1, max_value=16,
+                           callback=lambda s: setattr(state, "max_depth", dpg.get_value(s)))
 
         dpg.add_slider_int(label="Radius", default_value=state.radius, min_value=1, max_value=4,
                            callback=lambda s: setattr(state, "radius", dpg.get_value(s)))

@@ -21,8 +21,10 @@ def cli(profiling, denoising, no_tone_mapping):
     ti.init(arch=ti.gpu, default_fp=ti.f32, kernel_profiler=profiling)
 
     def setup_scene(scene: Scene):
-        scene.num_spheres[None] = 1
-        scene.spheres[0] = Sphere(center=ti.Vector([0, 0.5, 0]), radius=0.5, material_id=0)
+        scene.num_spheres[None] = 16
+        for i in range(4):
+            for j in range(4):
+                scene.spheres[i * 4 + j] = Sphere(center=ti.Vector([i, 0.7, j]), radius=0.7, material_id=0)
 
         scene.num_planes[None] = 1
         scene.planes[0] = Plane(point=ti.Vector([0, 0, 0]), normal=ti.Vector([0, 1, 0]), material_id=0)
@@ -31,8 +33,8 @@ def cli(profiling, denoising, no_tone_mapping):
                                       specular=ti.Vector([0.0, 0.0, 0.0]),
                                       shininess=0.0)
 
-        scene.light[None] = PointLight(position=ti.Vector([1, 1, 0]),
-                                       color=ti.Vector([1.0, 1.0, 1.0]))
+        scene.light[None] = PointLight(position=ti.Vector([2, 2, 2]),
+                                       color=ti.Vector([3.0, 3.0, 5.0]))
 
     # Set up application state
     state = AppState()
@@ -65,6 +67,7 @@ def cli(profiling, denoising, no_tone_mapping):
             ti.profiler.clear_kernel_profiler_info()
 
         render(scene, camera, spp=state.spp,
+               max_depth=state.max_depth,
                buffers=state.buffers,
                width=state.width, height=state.height)
 

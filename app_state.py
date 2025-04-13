@@ -9,6 +9,7 @@ class AppState:
         self.denoising = True
         self.tone_mapping = True
         self.spp = 1
+        self.max_depth = 5
         self.radius = 2
         self.sigma_color = 0.2
         self.sigma_normal = 0.2
