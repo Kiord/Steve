@@ -69,7 +69,8 @@ def cli(profiling, denoising, no_tone_mapping):
         render(scene, camera, spp=state.spp,
                max_depth=state.max_depth,
                buffers=state.buffers,
-               width=state.width, height=state.height)
+               width=state.width, height=state.height,
+               frame_idx=state.frame_count)
 
         final_buffer = state.buffers.color
 

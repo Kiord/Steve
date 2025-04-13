@@ -1,6 +1,7 @@
 import taichi as ti
 from ray import hit_scene
 import math
+from datatypes import vec3f
 
 class RenderBuffers:
     def __init__(self, width:int, height:int):
@@ -32,8 +33,29 @@ def spatial_random(i: ti.i32, j: ti.i32, b: ti.i32, s: ti.i32) -> ti.f32:  # typ
     seed = i * ti.u32(73856093) ^ j * ti.u32(19349663) ^ b * ti.u32(83492791) ^ s * ti.u32(2654435761)
     return (hash_int(seed) & ti.u32(0xFFFFFF)) / 16777216.0
 
+@ti.dataclass
+class RandomSampler:
+    i: ti.i32#type: ignore
+    j: ti.i32#type: ignore
+    f: ti.i32#type: ignore  
+    counter: ti.i32#type: ignore
+
+    @ti.func
+    def next(self) -> ti.f32:#type: ignore
+        seed = self.i * ti.u32(73856093) ^ self.j * ti.u32(19349663) ^ self.f * ti.u32(83492791) ^ self.counter * ti.u32(2654435761)
+        self.counter += 1
+        return (ti.sin(seed * 0.0001) * 43758.5453) % 1.0
+
+
+@ti.dataclass
+class DirectionSample:
+    direction: vec3f # type: ignore
+    pdf: ti.f32  # type: ignore
+    bsdf: vec3f # type: ignore
+
+
 @ti.func
-def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, s: ti.i32, max_depth:int, buffers: ti.template()): # type:ignore
+def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, max_depth: int, sampler: RandomSampler, buffers: ti.template()):#type:ignore
     throughput = ti.Vector([1.0, 1.0, 1.0])
     result = ti.Vector([0.0, 0.0, 0.0])
     background = ti.Vector([0.75, 0.75, 0.75])
@@ -64,8 +86,8 @@ def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, s: ti.i
             onb_u = rec.normal.cross(ti.Vector([1.0, 0.0, 0.0])).normalized()
         onb_v = rec.normal.cross(onb_u)
 
-        r1 = 2 * math.pi * spatial_random(i, j, bounce, s)
-        r2 = spatial_random(i, j, bounce, s)
+        r1 = 2 * math.pi * sampler.next()
+        r2 = sampler.next()
         r2s = ti.sqrt(r2)
 
         local_dir = ti.Vector([
@@ -77,7 +99,8 @@ def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, s: ti.i
 
         ray_o = rec.point + rec.normal * 1e-4
         ray_d = new_dir
-        throughput *= mat.diffuse
+        cos_theta = max(0.0, rec.normal.dot(ray_d))
+        throughput *= mat.diffuse * cos_theta
 
         if bounce == 0:
             aux_albedo = mat.diffuse
@@ -85,7 +108,7 @@ def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, s: ti.i
 
         if bounce > 2:
             p = max(throughput.x, throughput.y, throughput.z)
-            if spatial_random(i, j, bounce, s) > p:
+            if sampler.next() > p:
                 break
             throughput /= p
 
@@ -94,23 +117,26 @@ def path_trace(scene: ti.template(), ray_o, ray_d, i: ti.i32, j: ti.i32, s: ti.i
     buffers.normal[i, j] += aux_normal
 
 @ti.kernel
-def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, max_depth:ti.int32, buffers: ti.template(), width: ti.i32, height: ti.i32): # type: ignore
+def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, max_depth: ti.i32, buffers: ti.template(), width: ti.i32, height: ti.i32, frame_idx: ti.i32):# type:ignore
     for i, j in buffers.color:
         buffers.color[i, j] = ti.Vector([0.0, 0.0, 0.0])
         buffers.albedo[i, j] = ti.Vector([0.0, 0.0, 0.0])
         buffers.normal[i, j] = ti.Vector([0.0, 0.0, 0.0])
 
         for s in range(spp):
-            u = (i + spatial_random(i, j, 0, s)) / width
-            v = (j + spatial_random(i, j, 1, s)) / height
+            sampler = RandomSampler(i, j, frame_idx, s * 10)
+
+            u = (i + sampler.next()) / width
+            v = (j + sampler.next()) / height
+
             ray_o = camera[None].origin
             ray_d = normalize(
                 camera[None].lower_left_corner + u * camera[None].horizontal + v * camera[None].vertical
                 - camera[None].origin
             )
-            path_trace(scene, ray_o, ray_d, i, j, s, max_depth, buffers)
 
-        # Final averaging
+            path_trace(scene, ray_o, ray_d, i, j, max_depth, sampler, buffers)
+
         buffers.color[i, j] /= spp
         buffers.albedo[i, j] /= spp
         buffers.normal[i, j] /= spp
