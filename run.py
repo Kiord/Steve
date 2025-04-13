@@ -18,26 +18,33 @@ from ui import build_ui
 @click.option('--denoising', '-d', is_flag=True, default=False, help='Enable denoising')
 @click.option('--no-tone-mapping', '-ntm', is_flag=True, default=False, help='Disable tone mapping')
 def cli(profiling, denoising, no_tone_mapping):
-    ti.init(arch=ti.cpu, default_fp=ti.f32, kernel_profiler=profiling)
+    ti.init(arch=ti.gpu, default_fp=ti.f32, kernel_profiler=profiling)
 
     def setup_scene(scene: Scene):
         scene.num_spheres[None] = 16
         for i in range(4):
             for j in range(4):
                 scene.spheres[i * 4 + j] = Sphere(center=ti.Vector([i, 0.7, j]), radius=0.7, material_id=0)
+                if i ==1 and j==1:
+                    scene.spheres[i * 4 + j].material_id = 1
 
         scene.num_planes[None] = 1
         scene.planes[0] = Plane(point=ti.Vector([0, 0, 0]), normal=ti.Vector([0, 1, 0]), material_id=0)
 
         scene.materials[0] = Material(diffuse=ti.Vector([0.7, 0.7, 0.7]),
                                       specular=ti.Vector([0.0, 0.0, 0.0]),
-                                      shininess=0.0)
+                                      shininess=0.0,
+                                      emissive=ti.Vector([0.0, 0.0, 0.0]))
+        scene.materials[1] = Material(diffuse=ti.Vector([0.7, 0.7, 0.7]),
+                                      specular=ti.Vector([0.0, 0.0, 0.0]),
+                                      shininess=0.0,
+                                      emissive=ti.Vector([50.0, 0.0, 0.0]) )
 
         scene.light[None] = PointLight(position=ti.Vector([2, 2, 2]),
                                        color=ti.Vector([3.0, 3.0, 5.0]))
 
     # Set up application state
-    state = AppState(width=256, height=256)
+    state = AppState(width=800, height=600)
     state.profiling = profiling
     state.denoising = denoising
     state.tone_mapping = not no_tone_mapping

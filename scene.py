@@ -7,6 +7,8 @@ class Material:
     diffuse: vec3f # type: ignore
     specular: vec3f # type: ignore
     shininess: ti.f32 # type: ignore
+    emissive: vec3f # type: ignore
+
 
 
 @ti.dataclass
