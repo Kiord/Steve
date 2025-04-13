@@ -1,0 +1,3 @@
+taichi==1.7.3
+click
+dearpygui==2.0.0
