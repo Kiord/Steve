@@ -185,8 +185,7 @@ def sample_sphere_solid_angle(viewer: vec3f, sphere: Sphere, sampler: RandomSamp
 def sample_sphere_uniform(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:
     sls = SurfaceLightSample(pdf=0.0, point=vec3f(0.0), normal=vec3f(0.0))
 
-    ksi_x = sampler.next()
-    ksi_y = sampler.next()
+    ksi_x, ksi_y = sampler.next2()
 
     polar = ti.acos(1.0 - 2.0 * ksi_x)
     azimuth = 2.0 * math.pi * ksi_y

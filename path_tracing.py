@@ -1,5 +1,5 @@
 import taichi as ti
-from ray import hit_scene, Ray, Intersection
+from ray import hit_scene, Ray, Intersection, visibility
 import math
 from datatypes import vec3f
 from scene import Material, environment_color
@@ -46,6 +46,7 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     
     #sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
     sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
+    #sls.point += EPS * sls.normal
     
     pdf = sls.pdf / scene.num_light_spheres[None]
 
@@ -62,7 +63,10 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     if prod.norm() > 0.0:
         ray_light = Ray(inter.point, point_to_sample)
         inter_light = hit_scene(ray_light, scene, EPS, dist-EPS)
-        v =  1#float(inter_light.hit == 0)
+
+        v =  float(inter_light.hit == 0 or abs(inter_light.t - dist) < EPS or inter_light.t < EPS)
+        
+        #v = visibility(ray_light, scene, sls.point)
 
         value = v * light_color * prod
 

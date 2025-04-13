@@ -112,3 +112,11 @@ def hit_scene(ray:Ray, scene: ti.template(), t_min, t_max): # type: ignore
 
     return final_inter
 
+@ti.func
+def visibility(ray:Ray, scene: ti.template(), point:vec3f): # type: ignore
+    inter = hit_scene(ray, scene, EPS, MAX_DIST)
+    #delta_start = (inter.point - ray.origin).norm() 
+    delta_finish = (inter.point - point).norm() 
+    return float(inter.hit == 0 or delta_finish < EPS)
+
+
