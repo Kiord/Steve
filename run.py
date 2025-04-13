@@ -14,11 +14,23 @@ from app_state import AppState
 from ui import build_ui
 
 @click.command()
-@click.option('--profiling', '-p', is_flag=True, default=False, help='Enable Taichi kernel profiling')
-@click.option('--denoising', '-d', is_flag=True, default=False, help='Enable denoising')
-@click.option('--no-tone-mapping', '-ntm', is_flag=True, default=False, help='Disable tone mapping')
-def cli(profiling, denoising, no_tone_mapping):
+@click.option('--profiling', '-p', type=click.BOOL, default=False, help='Ënable profiling')
+@click.option('--denoising', '-d', type=click.BOOL, default=False, help='Ënable denoising')
+@click.option('--tone-mapping', '-tm', type=click.BOOL, default=True, help='Enable tone mapping')
+@click.option('--size', '-s', type=(int, int), default=(800, 600), help='Viewport size as WIDTH HEIGHT')
+@click.option('--spp', type=int, default=1, help='Samples per pixel')
+@click.option('--max_depth', '-md', type=int, default=5, help='Max path depth')
+def cli(profiling, denoising, tone_mapping, size, spp, max_depth):
+  
     ti.init(arch=ti.gpu, default_fp=ti.f32, kernel_profiler=profiling)
+
+    state = AppState(width=size[0], height=size[1])
+    state.profiling = profiling
+    state.denoising = denoising
+    state.tone_mapping = tone_mapping
+    state.spp = spp
+    state.max_depth = max_depth
+    
 
     def setup_scene(scene: Scene):
         scene.num_spheres[None] = 16
@@ -44,10 +56,7 @@ def cli(profiling, denoising, no_tone_mapping):
                                        color=ti.Vector([0.0, 0.0, 0.0]))
 
     # Set up application state
-    state = AppState(width=800, height=600)
-    state.profiling = profiling
-    state.denoising = denoising
-    state.tone_mapping = not no_tone_mapping
+    
 
     scene = Scene()
     setup_scene(scene)
