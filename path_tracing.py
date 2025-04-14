@@ -5,7 +5,8 @@ from datatypes import vec3f
 from scene import Material, environment_color
 from camera import make_ray
 from utils import (Contribution, RandomSampler, sample_BSDF, sample_sphere_solid_angle, BSDF, 
-                   sample_sphere_uniform)
+                   sample_sphere_uniform, sample_sphere_hemisphere_cosine, sample_sphere_hemisphere_uniform,
+                    )
 from constants import EPS, MAX_DIST
 
 class RenderBuffers:
@@ -41,13 +42,15 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     
     u = sampler.next()
     light_sphere_id = min(int(u * scene.num_light_spheres[None]), scene.num_light_spheres[None]-1)
-    light_sphere = scene.spheres[scene.light_spheres_id[light_sphere_id]]
+    sphere_id = scene.light_spheres_id[light_sphere_id]
+    light_sphere = scene.spheres[sphere_id]
     mat = scene.materials[light_sphere.material_id]
     light_color = mat.emissive;
     
-    #sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
-    sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
-    #sls.point += EPS * sls.normal
+    sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
+    #sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
+    #sls = sample_sphere_hemisphere_uniform(inter.point, light_sphere, sampler)
+    #sls = sample_sphere_hemisphere_cosine(inter.point, light_sphere, sampler)
     
     pdf = sls.pdf / scene.num_light_spheres[None]
 
@@ -62,15 +65,21 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     value = vec3f(0.0)
 
     if prod.norm() > 0.0:
-        #ray_light = Ray(inter.point, point_to_sample)
-        #inter_light = intersect_scene(ray_light, scene, EPS, dist-EPS)
+        ray_light = Ray(inter.point, point_to_sample)
+        inter_light = intersect_scene(ray_light, scene, EPS, dist-EPS)
+        v = 1
+        if inter_light.hit:# and (inter_light.sphere_id != sphere_id):
+            v = 0
+        # if sls.normal.dot(point_to_sample) > 0:
+        #     v = 0 # ...
+
         #print(inter.point, sls.point, sls.point-inter.point)
-        v = visibility(scene, inter.point, sls.point)
+        #v = visibility(scene, inter.point, sls.point)
         #v =  float(inter_light.hit == 0 or abs(inter_light.t - dist) < EPS or inter_light.t < EPS)
         
         #v = visibility(ray_light, scene, sls.point)
 
-        value = v * light_color * prod
+        value = v * light_color  * prod
 
     return Contribution(value, pdf)
 
@@ -104,7 +113,6 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
                 light_contrib_color = light_contrib.value / light_contrib.pdf
         
         result += (throughput / pdf_total) * light_contrib_color
-
 
 
         # # Russian roulette after a few bounces
