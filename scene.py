@@ -42,6 +42,8 @@ class Scene:
         # existing
         self.num_spheres = ti.field(dtype=ti.i32, shape=())
         self.spheres = Sphere.field(shape=MAX_SPHERES)
+        self.num_triangles = ti.field(dtype=ti.i32, shape=())
+        self.triangles = Triangle.field(shape=MAX_TRIANGLES)
         self.num_planes = ti.field(dtype=ti.i32, shape=())
         self.planes = Plane.field(shape=MAX_PLANES)
         self.materials = Material.field(shape=MAX_MATERIALS)
@@ -78,7 +80,24 @@ class Scene:
         self.num_planes[None] += 1
         self.planes[idx] =  Plane(point=ti.Vector(list(point)), normal=ti.Vector(list(normal)), material_id=material_id)
         if self.materials[material_id].emissive.norm() > 0.0:
-            print("[Warning] Emissive plane light not handled.")
+            print("[Warning] Plane lights are not supported.")
+    
+    def add_triangle(self, v0:np.ndarray, v1:np.ndarray, v2:np.ndarray, material_id:int):
+        v0 = np.asanyarray(v0)
+        v1 = np.asanyarray(v1)
+        v2 = np.asanyarray(v2)
+        idx = self.num_triangles[None]
+        self.num_triangles[None] += 1
+        normal = np.cross(v1-v0, v2-v1)
+        normal = normal / np.linalg.norm(normal)
+        self.triangles[idx] =  Triangle(
+            v0=ti.Vector(list(v0)),
+            v1=ti.Vector(list(v1)), 
+            v2=ti.Vector(list(v2)), 
+            normal=ti.Vector(list(normal)),
+            material_id=material_id)
+        if self.materials[material_id].emissive.norm() > 0.0:
+            print("[Warning] Triangle lights are not supported.")
 
 @ti.func
 def environment_color(view_dir: vec3f, scene:ti.template()) -> vec3f: # type: ignore

@@ -43,18 +43,18 @@ def compute_camera_vectors(
     return lower_left_corner, horizontal, vertical
 
 
-def create_camera(origin : np.ndarray,
-                  lookat : np.ndarray,
-                  vup : np.ndarray,
-                  vfov : float,
-                  aspect_ratio : float):
-    lower_left_corner, horizontal, vertical = compute_camera_vectors(
-        origin, lookat, vup, vfov, aspect_ratio)
+# def create_camera(origin : np.ndarray,
+#                   lookat : np.ndarray,
+#                   vup : np.ndarray,
+#                   vfov : float,
+#                   aspect_ratio : float):
+#     lower_left_corner, horizontal, vertical = compute_camera_vectors(
+#         origin, lookat, vup, vfov, aspect_ratio)
 
 
-    cam = Camera.field(shape=())
-    cam[None] = Camera(origin=ti.Vector(list(origin)),
-                       lower_left_corner=ti.Vector(list(lower_left_corner)),
-                       horizontal=ti.Vector(list(horizontal)),
-                       vertical=ti.Vector(list(vertical)))
-    return cam
+#     cam = Camera.field(shape=())
+#     cam[None] = Camera(origin=ti.Vector(list(origin)),
+#                        lower_left_corner=ti.Vector(list(lower_left_corner)),
+#                        horizontal=ti.Vector(list(horizontal)),
+#                        vertical=ti.Vector(list(vertical)))
+#     return cam

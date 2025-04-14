@@ -1,6 +1,7 @@
 import taichi as ti
 import numpy as np
 from camera import compute_camera_vectors
+from constants import UP
 
 
 class FreeFlyCameraController:
@@ -25,12 +26,12 @@ class FreeFlyCameraController:
         ], dtype=np.float32)
         forward /= np.linalg.norm(forward)
 
-        right = np.cross(forward, np.array([0, 1, 0], dtype=np.float32))
+        right = np.cross(forward, UP)
         right = right / np.linalg.norm(right)
         up = np.cross(right, forward)
         up = up / np.linalg.norm(up)
 
-        return forward, right, up
+        return forward, right, UP
 
     def update_from_input(self, gui :ti.ui.Window, dt):
         forward, right, _ = self.get_view_dirs()

@@ -18,6 +18,7 @@ class Intersection:
     material_id: ti.i32 # type:ignore
     sphere_id:ti.i32 # type:ignore
     plane_id : ti.i32 # type:ignore
+    triangle_id : ti.i32 # type:ignore
     shape_id : ti.i32 # type:ignore  0 sphere, 1 plane, 2 tri 
     ray: Ray
 
@@ -32,6 +33,7 @@ def empty_intersection(ray:Ray) -> Intersection:
         material_id=-1,
         sphere_id=-1,
         plane_id=-1,
+        triangle_id=-1,
         shape_id=-1,
         ray=ray
     )               
@@ -129,8 +131,8 @@ def ray_scene_intersection(ray: Ray, scene: ti.template(), inter:ti.template(), 
     for i in range(scene.num_planes[None]):
         ray_plane_intersection(ray, scene.planes[i], inter, i, t_min, t_max)
 
-    # for i in range(scene.num_triangles[None]):
-    #     ray_triangle_intersection(ray, scene.triangles[i], inter, i, t_min, t_max)
+    for i in range(scene.num_triangles[None]):
+        ray_triangle_intersection(ray, scene.triangles[i], inter, i, t_min, t_max)
 
 @ti.func
 def intersect_scene(ray: Ray, scene: ti.template(), t_min: ti.f32, t_max: ti.f32):  # type: ignore

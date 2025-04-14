@@ -55,6 +55,8 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
 
         scene.add_plane([0,0,0], [0,1,0], 0)
 
+        scene.add_triangle([0,0,0], [5,5,5], [0,0,5], 0)
+
     scene = Scene()
     setup_scene(scene)
 
