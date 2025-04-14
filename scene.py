@@ -25,6 +25,14 @@ class Plane:
     material_id: ti.i32 # type: ignore
 
 @ti.dataclass
+class Triangle:
+    v0: vec3f #type:ignore
+    v1: vec3f #type:ignore
+    v2: vec3f #type:ignore
+    normal: vec3f  # optional precomputed #type:ignore
+    material_id: ti.i32 #type:ignore
+
+@ti.dataclass
 class PointLight:
     position: vec3f # type: ignore
     color: vec3f # type: ignore

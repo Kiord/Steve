@@ -1,5 +1,5 @@
 import taichi as ti
-from ray import hit_scene, Ray, Intersection, visibility
+from ray import intersect_scene, Ray, Intersection, visibility
 import math
 from datatypes import vec3f
 from scene import Material, environment_color
@@ -25,7 +25,7 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
     sample = sample_BSDF(inter, inter.ray.direction, sampler)
     if sample.pdf > 0:
         ray = Ray(inter.point + inter.normal * 1e-3, sample.direction)
-        inter = hit_scene(scene, ray.origin, ray.direction, 0.001, 1e5)
+        inter = intersect_scene(ray, scene, ray.origin, ray.direction, 0.001, 1e5)
 
         if inter.hit == 1 and inter.material.emissive.norm() > 0:
             cos_theta = inter.normal.dot(sample.direction)
@@ -42,7 +42,8 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     u = sampler.next()
     light_sphere_id = min(int(u * scene.num_light_spheres[None]), scene.num_light_spheres[None]-1)
     light_sphere = scene.spheres[scene.light_spheres_id[light_sphere_id]]
-    light_color = scene.materials[light_sphere.material_id].emissive;
+    mat = scene.materials[light_sphere.material_id]
+    light_color = mat.emissive;
     
     #sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
     sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
@@ -53,7 +54,7 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     point_to_sample = sls.point - inter.point
     dist = point_to_sample.norm()
     point_to_sample /= dist 
-    bsdf = BSDF(inter, -inter.ray.direction, point_to_sample)
+    bsdf = BSDF(mat, inter.normal, -inter.ray.direction, point_to_sample)
 
     cosi = abs(inter.normal.dot(point_to_sample))
     prod = bsdf * cosi
@@ -61,10 +62,11 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     value = vec3f(0.0)
 
     if prod.norm() > 0.0:
-        ray_light = Ray(inter.point, point_to_sample)
-        inter_light = hit_scene(ray_light, scene, EPS, dist-EPS)
-
-        v =  float(inter_light.hit == 0 or abs(inter_light.t - dist) < EPS or inter_light.t < EPS)
+        #ray_light = Ray(inter.point, point_to_sample)
+        #inter_light = intersect_scene(ray_light, scene, EPS, dist-EPS)
+        #print(inter.point, sls.point, sls.point-inter.point)
+        v = visibility(scene, inter.point, sls.point)
+        #v =  float(inter_light.hit == 0 or abs(inter_light.t - dist) < EPS or inter_light.t < EPS)
         
         #v = visibility(ray_light, scene, sls.point)
 
@@ -81,7 +83,7 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
     aux_normal = ti.Vector([0.0, 0.0, 0.0])
 
     for bounce in range(max_depth):
-        inter = hit_scene(ray, scene, EPS, MAX_DIST)
+        inter = intersect_scene(ray, scene, 0, MAX_DIST)
 
         if not inter.hit:
             env_color = environment_color(ray.direction, scene)
@@ -90,7 +92,7 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
                 aux_albedo = env_color
             break
 
-        mat = inter.material
+        mat = scene.materials[inter.material_id]
 
         light_contrib_color = vec3f(0,0,0)
         use_emissive = mat.emissive.norm() > 0 and bounce == 0
@@ -120,7 +122,7 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
         pdf_total *= ds.pdf
 
         # Update ray
-        ray.origin = inter.point + ds.direction * 1e-4
+        ray.origin = inter.point + inter.normal * EPS
         ray.direction = ds.direction
 
         if bounce == 0:

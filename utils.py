@@ -96,16 +96,16 @@ def sample_BSDF(normal: vec3f, material:Material, incoming_dir: vec3f, sampler: 
 
 
 @ti.func
-def BSDF(inter, wi, wo):
-    n = inter.material.shininess
+def BSDF(material, normal, wi, wo):
+    n = material.shininess
     is_lambert = n == 0.0
-    coswi = inter.normal.dot(wi)
-    r = ti.select(is_lambert, inter.normal, reflect(wo, inter.normal))
+    coswi = normal.dot(wi)
+    r = ti.select(is_lambert, normal, reflect(wo, normal))
     cosr = r.dot(wi)
-    coswo = max(min(inter.normal.dot(wo), 1.0), -1)
+    coswo = max(min(normal.dot(wo), 1.0), -1)
     ok = (coswi > 0.0) and (cosr > 0.0) and (coswo > 0.0)
     factor = (n + 1.0 + ti.cast(is_lambert, ti.f32)) / (2.0 * math.pi)
-    return ti.select(ok, inter.material.diffuse * factor * cosr ** n, ti.Vector([0.0, 0.0, 0.0]))
+    return ti.select(ok, material.diffuse * factor * cosr ** n, ti.Vector([0.0, 0.0, 0.0]))
 
 
 @ti.func
