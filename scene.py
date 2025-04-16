@@ -5,10 +5,9 @@ import numpy as np
 
 @ti.dataclass
 class Material:
-    diffuse: vec3f # type: ignore
-    specular: vec3f # type: ignore
-    shininess: ti.f32 # type: ignore
+    albedo: vec3f # type: ignore
     emissive: vec3f # type: ignore
+    shininess: ti.f32 # type: ignore
 
 
 
@@ -63,7 +62,7 @@ class Scene:
 
         # Default values
         self.sun_direction[None] = vec3f(0.0, 1.0, 0.0).normalized()  # overhead
-        self.sun_color[None] = 0 * vec3f(5.0, 4.5, 3.0)  # warm bright sun
+        self.sun_color[None] = 1 * vec3f(5.0, 4.5, 3.0)  # warm bright sun
         self.sun_size[None] = 0.01  # sharpness of falloff (lower = smaller sun)
     
     def add_sphere(self, center:np.ndarray, radius:float, material_id:int):

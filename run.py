@@ -38,24 +38,24 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
     
 
     def setup_scene(scene: Scene):
-        scene.materials[0] = Material(diffuse=ti.Vector([0.7, 0.7, 0.7]),
-                                      specular=ti.Vector([1.0, 1.0, 1.0]),
+        scene.materials[0] = Material(albedo=ti.Vector([0.7, 0.7, 0.7]),
                                       shininess=0.0,
                                       emissive=ti.Vector([0.0, 0.0, 0.0]))
-        scene.materials[1] = Material(diffuse=ti.Vector([0.7, 0.7, 0.7]),
-                                      specular=ti.Vector([0.0, 0.0, 0.0]),
+        scene.materials[1] = Material(albedo=ti.Vector([1.0, 1.0, 1.0]),
                                       shininess=0.0,
-                                      emissive=ti.Vector([20.0, 0.0, 0.0]) )
-        scene.materials[2] = Material(diffuse=ti.Vector([0.5, 0.5, 0.5]),  
-                                      specular=ti.Vector([1.0, 1.0, 1.0]),
-                                      shininess=10_000.0,
-                                      emissive=ti.Vector([0.0, 0.0, 0.0]) )
+                                      emissive=ti.Vector([20.0, 0.0, 0.0]))
+        scene.materials[2] = Material(albedo=ti.Vector([1.0, 1.0, 1.0]),
+                                shininess=50.0,
+                                emissive=ti.Vector([0.0, 0.0, 0.0]))
+
 
         for i in range(4):
             for j in range(4):
                 scene.add_sphere([i, 0.5 + 0.0*float(i!=1 and j!=1), j], 0.5, int(i==1 and j==1))
 
         scene.spheres[1].center -= ti.Vector([10,0,0])
+
+        scene.add_sphere([-2,1,-2], 1, 2)
 
         scene.add_plane([0,0,0], [0,1,0], 0)
 

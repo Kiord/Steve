@@ -19,23 +19,23 @@ class RenderBuffers:
         self.final_buffer = ti.Vector.field(3, ti.f32, shape=(width, height))
 
 
-@ti.func
-def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> (vec3f, ti.f32):  # type: ignore
-    contrib = vec3f(0.0, 0.0, 0.0)
-    pdf = 0.0
+# @ti.func
+# def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> (vec3f, ti.f32):  # type: ignore
+#     contrib = vec3f(0.0, 0.0, 0.0)
+#     pdf = 0.0
 
-    sample = sample_BSDF(inter, inter.ray.direction, sampler)
-    if sample.pdf > 0:
-        ray = Ray(inter.point + inter.normal * 1e-3, sample.direction)
-        inter = intersect_scene(ray, scene, ray.origin, ray.direction, 0.001, 1e5)
+#     sample = sample_BSDF(inter, inter.ray.direction, sampler)
+#     if sample.pdf > 0:
+#         ray = Ray(inter.point + inter.normal * 1e-3, sample.direction)
+#         inter = intersect_scene(ray, scene, ray.origin, ray.direction, 0.001, 1e5)
 
-        if inter.hit == 1 and inter.material.emissive.norm() > 0:
-            cos_theta = inter.normal.dot(sample.direction)
-            if cos_theta > 0.0:
-                contrib = sample.bsdf * inter.material.emissive * cos_theta / sample.pdf
-                pdf = sample.pdf
+#         if inter.hit == 1 and inter.material.emissive.norm() > 0:
+#             cos_theta = inter.normal.dot(sample.direction)
+#             if cos_theta > 0.0:
+#                 contrib = sample.bsdf * inter.material.emissive * cos_theta / sample.pdf
+#                 pdf = sample.pdf
 
-    return contrib, pdf
+#     return contrib, pdf
 
 
 @ti.func
@@ -117,15 +117,16 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
 
 
         # # Russian roulette after a few bounces
-        # if bounce > 2:
-        #     p = max(throughput.x, throughput.y, throughput.z)
-        #     if sampler.next() > p:
-        #         break
+        if bounce > 2:
+            p = max(throughput.x, throughput.y, throughput.z)
+            if sampler.next() > p:
+                break
         #     throughput /= p
         #     pdf_total *= p
 
         ds = sample_BSDF(inter.normal, mat, ray.direction, sampler)
         if ds.pdf < EPS:
+            #result = ti.Vector([1000.,0,0])
             break
 
         cos_theta = max(0.0, inter.normal.dot(ds.direction))
@@ -137,8 +138,10 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
         ray.direction = ds.direction
 
         if bounce == 0:
-            aux_albedo = mat.diffuse
+            aux_albedo = mat.albedo
             aux_normal = inter.normal
+            # result = 0.5 * ds.direction + 0.5
+            # break
     return result, aux_albedo, aux_normal
 
 

@@ -2,6 +2,15 @@ import taichi as ti
 from datatypes import vec3f
 from scene import Material, Sphere
 import math
+from constants import EPS
+
+
+@ti.dataclass
+class DirectionSample:
+    direction: vec3f # type: ignore
+    pdf: ti.f32  # type: ignore
+    bsdf: vec3f # type: ignore
+
 
 @ti.dataclass
 class RandomSampler:
@@ -26,7 +35,7 @@ class RandomSampler:
 
 
 @ti.func
-def reflect(v: vec3f, n: vec3f) -> vec3f:
+def reflect(v: vec3f, n: vec3f) -> vec3f:# type: ignore
     return v - 2.0 * v.dot(n) * n
 
 # @ti.func
@@ -36,7 +45,7 @@ def reflect(v: vec3f, n: vec3f) -> vec3f:
 #     return v * c + axis.cross(v) * s + axis * (axis.dot(v)) * (1.0 - c)
 
 @ti.func
-def rotate(axis: vec3f, angle: ti.f32, v: vec3f) -> vec3f:
+def rotate(axis: vec3f, angle: ti.f32, v: vec3f) -> vec3f:# type: ignore
     half_angle = 0.5 * angle
     s = ti.sin(half_angle)
     w = ti.cos(half_angle)
@@ -48,40 +57,33 @@ def rotate(axis: vec3f, angle: ti.f32, v: vec3f) -> vec3f:
         2.0 * w * u.cross(v)
     )
 
-@ti.dataclass
-class DirectionSample:
-    direction: vec3f # type: ignore
-    pdf: ti.f32  # type: ignore
-    bsdf: vec3f # type: ignore
-
 @ti.func
-def randomDirectionHemisphere(main_dir: vec3f, n: ti.f32, sampler: RandomSampler) -> vec3f:
-    r1 = sampler.next()
-    r2 = sampler.next()
+def random_direction_hemisphere(main_dir: vec3f, n: ti.f32, sampler: RandomSampler) -> vec3f:  # type: ignore
+    r1, r2 = sampler.next2()
     phi = 2.0 * math.pi * r1
     cos_theta = r2 ** (1.0 / (n + 1.0))
     sin_theta = ti.sqrt(1.0 - cos_theta * cos_theta)
 
-    local = ti.Vector([
+    # Local sample in hemisphere around Z+
+    local = vec3f(
         ti.cos(phi) * sin_theta,
         ti.sin(phi) * sin_theta,
         cos_theta
-    ])
-    
-    result = ti.Vector([main_dir.z, 0.0, 0.0]) * local
+    )
 
-    if ti.abs(main_dir.z) <= 0.99999:
-        up = ti.Vector([0.0, 0.0, 1.0])
-        axis = main_dir.cross(up).normalized()
-        angle = ti.acos(main_dir.dot(up))
-        result = rotate(axis, angle, local)
-    return result
+    w = main_dir.normalized()
+    a = vec3f(0.0, 1.0, 0.0) if ti.abs(w.x) > (1-EPS) else vec3f(1.0, 0.0, 0.0)
+    v = w.cross(a).normalized()
+    u = v.cross(w)
+
+    return (u * local.x + v * local.y + w * local.z).normalized()
 
 @ti.func
-def sample_BSDF(normal: vec3f, material:Material, incoming_dir: vec3f, sampler: RandomSampler) -> DirectionSample:
+def sample_BSDF(normal: vec3f, material:Material, incoming_dir: vec3f, sampler: RandomSampler) -> DirectionSample:# type: ignore
     n = material.shininess
-    is_lambert = n == 0.0
-    r = ti.select(is_lambert, normal, reflect(-incoming_dir, normal))
+    is_lambert = n < EPS
+
+    r = ti.select(is_lambert, normal, reflect(incoming_dir, normal))
 
     sampled = DirectionSample(
         direction=ti.Vector([0.0, 0.0, 0.0]),
@@ -89,7 +91,7 @@ def sample_BSDF(normal: vec3f, material:Material, incoming_dir: vec3f, sampler: 
         bsdf=ti.Vector([0.0, 0.0, 0.0])
     )
 
-    sampled.direction = randomDirectionHemisphere(r, max(n, 1.0), sampler)
+    sampled.direction = random_direction_hemisphere(r, max(n, 1.0), sampler)
 
     cosr = r.dot(sampled.direction)
     correct_r = 1.0 if cosr > 0.0 else -1.0
@@ -102,8 +104,8 @@ def sample_BSDF(normal: vec3f, material:Material, incoming_dir: vec3f, sampler: 
 
     w = (n + 1.0 + ti.cast(is_lambert, ti.f32)) / (2.0 * math.pi)
 
-    sampled.pdf = ti.select(ok, w * (coswo if is_lambert else cosr_pow_n), 0.0)
-    sampled.bsdf = ti.select(ok, material.diffuse * w * cosr_pow_n, ti.Vector([0.0, 0.0, 0.0]))
+    sampled.pdf = float(ok) * w * (coswo if is_lambert else cosr_pow_n)
+    sampled.bsdf = float(ok) * w * material.albedo * cosr_pow_n
 
     return sampled
 
@@ -111,15 +113,14 @@ def sample_BSDF(normal: vec3f, material:Material, incoming_dir: vec3f, sampler: 
 @ti.func
 def BSDF(material, normal, wi, wo):
     n = material.shininess
-    is_lambert = n == 0.0
+    is_lambert = n < EPS# 0.0
     coswi = normal.dot(wi)
     r = ti.select(is_lambert, normal, reflect(wo, normal))
-    cosr = r.dot(wi)
+    cosr = wi.dot(r)
     coswo = max(min(normal.dot(wo), 1.0), -1)
     ok = (coswi > 0.0) and (cosr > 0.0) and (coswo > 0.0)
-    factor = (n + 1.0 + ti.cast(is_lambert, ti.f32)) / (2.0 * math.pi)
-    return ti.select(ok, material.diffuse * factor * cosr ** n, ti.Vector([0.0, 0.0, 0.0]))
-
+    bsdf = (material.albedo * cosr ** n) * (n + 1.0 + float(is_lambert)) / (2.0 * math.pi)
+    return float(ok) * bsdf
 
 @ti.func
 def normalize(v):
@@ -140,23 +141,23 @@ class Contribution:
 
 @ti.dataclass
 class LightSample:
-    direction: vec3f
-    contrib: vec3f
-    pdf: ti.f32
+    direction: vec3f# type: ignore
+    contrib: vec3f# type: ignore
+    pdf: ti.f32# type: ignore
 
 @ti.dataclass
 class SurfaceLightSample:
-    pdf: ti.f32
-    point: vec3f
-    normal: vec3f
+    pdf: ti.f32# type: ignore
+    point: vec3f# type: ignore
+    normal: vec3f# type: ignore
 
 @ti.func
-def copysign(x: ti.f32, sign_source: ti.f32) -> ti.f32:
+def copysign(x: ti.f32, sign_source: ti.f32) -> ti.f32:# type: ignore
     return ti.select(sign_source >= 0.0, ti.abs(x), -ti.abs(x))
 
 
 @ti.func
-def sample_sphere_solid_angle(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:
+def sample_sphere_solid_angle(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:# type: ignore
     sls = SurfaceLightSample(pdf=0.0, point=vec3f(0.0), normal=vec3f(0.0))
 
     # Step 1: setup view direction and distance
@@ -213,7 +214,7 @@ def sample_sphere_solid_angle(viewer: vec3f, sphere: Sphere, sampler: RandomSamp
 
 
 @ti.func
-def sample_sphere_uniform(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:
+def sample_sphere_uniform(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:# type: ignore
     sls = SurfaceLightSample(pdf=0.0, point=vec3f(0.0), normal=vec3f(0.0))
 
     ksi_x, ksi_y = sampler.next2()
@@ -235,7 +236,7 @@ def sample_sphere_uniform(viewer: vec3f, sphere: Sphere, sampler: RandomSampler)
 
 
 @ti.func
-def sample_uniform_hemisphere(main_dir: vec3f, sampler: RandomSampler) -> vec3f:
+def sample_uniform_hemisphere(main_dir: vec3f, sampler: RandomSampler) -> vec3f:# type: ignore
     r1, r2 = sampler.next2()
 
     z = r1
@@ -253,7 +254,7 @@ def sample_uniform_hemisphere(main_dir: vec3f, sampler: RandomSampler) -> vec3f:
     return (u * x + v * y + w * z).normalized()
 
 @ti.func
-def sample_cosine_hemisphere(main_dir: vec3f, sampler: RandomSampler) -> vec3f:
+def sample_cosine_hemisphere(main_dir: vec3f, sampler: RandomSampler) -> vec3f:# type: ignore
     r1, r2 = sampler.next2()
 
     phi = 2.0 * math.pi * r1
@@ -271,7 +272,7 @@ def sample_cosine_hemisphere(main_dir: vec3f, sampler: RandomSampler) -> vec3f:
     return (u * x + v * y + w * z).normalized()
 
 @ti.func
-def sample_sphere_hemisphere_uniform(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:
+def sample_sphere_hemisphere_uniform(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:# type: ignore
     sls = SurfaceLightSample(pdf=0.0, point=vec3f(0.0), normal=vec3f(0.0))
 
     main_dir = (viewer - sphere.center).normalized()
@@ -287,7 +288,7 @@ def sample_sphere_hemisphere_uniform(viewer: vec3f, sphere: Sphere, sampler: Ran
     return sls
 
 @ti.func
-def sample_sphere_hemisphere_cosine(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:
+def sample_sphere_hemisphere_cosine(viewer: vec3f, sphere: Sphere, sampler: RandomSampler) -> SurfaceLightSample:# type: ignore
     sls = SurfaceLightSample(pdf=0.0, point=vec3f(0.0), normal=vec3f(0.0))
 
     main_dir = (viewer - sphere.center).normalized()
