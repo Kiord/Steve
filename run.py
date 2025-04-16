@@ -48,7 +48,7 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
                                       emissive=ti.Vector([20.0, 0.0, 0.0]) )
         scene.materials[2] = Material(diffuse=ti.Vector([0.5, 0.5, 0.5]),  
                                       specular=ti.Vector([1.0, 1.0, 1.0]),
-                                      shininess=100.0,
+                                      shininess=10_000.0,
                                       emissive=ti.Vector([0.0, 0.0, 0.0]) )
 
         for i in range(4):
@@ -59,14 +59,14 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
 
         scene.add_plane([0,0,0], [0,1,0], 0)
 
-        scene.add_triangle([0,0,0], [5,5,5], [0,0,5], 0)
+        scene.add_triangle([0,0,0], [5,5,5], [0,0,5], 2)
 
     scene = Scene()
     setup_scene(scene)
 
     camera = Camera.field(shape=())
-    camera_controller = FreeFlyCameraController()
-    camera_controller.update_camera_field(camera, state.aspect_ratio)
+    camera_controller = FreeFlyCameraController(state)
+    camera_controller.update_camera_field(camera)
 
     #build_ui(state)
     #threading.Thread(target=dpg.start_dearpygui, daemon=True).start()
@@ -79,7 +79,7 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
         dt = timer.get_dt()
 
         camera_controller.update_from_input(window, dt)
-        camera_controller.update_camera_field(camera, state.aspect_ratio)
+        camera_controller.update_camera_field(camera)
 
         if state.profiling:
             ti.profiler.clear_kernel_profiler_info()
@@ -88,9 +88,9 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
                max_depth=state.max_depth,
                buffers=state.buffers,
                width=state.width, height=state.height,
-               frame_idx=state.frame_count)
+               frame_id=state.frame_id)
 
-        final_buffer = state.buffers.color
+        final_buffer = state.buffers.final_buffer
 
         if state.denoising:
             bilateral_filter(state.buffers,
@@ -103,7 +103,7 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
         if state.tone_mapping:
             tone_map(final_buffer)
        
-        canvas.set_image(state.buffers.normal)
+        canvas.set_image(final_buffer)
 
         window.show()
 
@@ -111,7 +111,8 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
             ti.sync()
             ti.profiler.print_kernel_profiler_info()
 
-        state.frame_count += 1
+        state.frame_id += 1
+        state.scene_changed=False
 
 if __name__ == "__main__":
     cli()

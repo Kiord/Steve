@@ -15,4 +15,4 @@ class AppState:
         self.sigma_normal = 0.2
         self.sigma_spatial = 2.0
         self.buffers = RenderBuffers(width, height)
-        self.frame_count = 0
+        self.frame_id = 0

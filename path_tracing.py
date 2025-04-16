@@ -16,6 +16,7 @@ class RenderBuffers:
         self.normal = ti.Vector.field(3, ti.f32, shape=(width, height))
         self.denoised = ti.Vector.field(3, ti.f32, shape=(width, height))
         self.accum_color = ti.Vector.field(3, ti.f32, shape=(width, height))
+        self.final_buffer = ti.Vector.field(3, ti.f32, shape=(width, height))
 
 
 @ti.func
@@ -84,7 +85,7 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     return Contribution(value, pdf)
 
 @ti.func
-def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: int, sampler: RandomSampler, buffers: ti.template()):  # type: ignore
+def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: int, sampler: RandomSampler):  # type: ignore
     throughput = ti.Vector([1.0, 1.0, 1.0])
     pdf_total = 1.0
     result = ti.Vector([0.0, 0.0, 0.0])
@@ -138,29 +139,34 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
         if bounce == 0:
             aux_albedo = mat.diffuse
             aux_normal = inter.normal
+    return result, aux_albedo, aux_normal
 
-    buffers.color[i, j] += result
-    buffers.albedo[i, j] += aux_albedo
-    buffers.normal[i, j] += aux_normal
 
 
 
 @ti.kernel
-def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, max_depth: ti.i32, buffers: ti.template(), width: ti.i32, height: ti.i32, frame_idx: ti.i32):# type:ignore
+def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, max_depth: ti.i32, buffers: ti.template(), width: ti.i32, height: ti.i32, frame_id: ti.i32):# type:ignore
     for i, j in buffers.color:
         buffers.color[i, j] = ti.Vector([0.0, 0.0, 0.0])
         buffers.albedo[i, j] = ti.Vector([0.0, 0.0, 0.0])
         buffers.normal[i, j] = ti.Vector([0.0, 0.0, 0.0])
-        sampler = RandomSampler(i, j, 0, 0)
+        if frame_id == 0:
+            buffers.accum_color[i, j] = ti.Vector([0.0, 0.0, 0.0])
+        sampler = RandomSampler(i, j, frame_id, 0)
         for s in range(spp):
 
             u = (i + sampler.next()) / width
             v = (j + sampler.next()) / height
 
             ray = make_ray(camera[None], u, v)
-            path_trace(scene, ray, i, j, max_depth, sampler, buffers)
-
+            color, aux_albedo, aux_normal = path_trace(scene, ray, i, j, max_depth, sampler)
+            buffers.color[i, j] += color
+            buffers.albedo[i, j] += aux_albedo
+            buffers.normal[i, j] += aux_normal
         buffers.color[i, j] /= spp
         buffers.albedo[i, j] /= spp
         buffers.normal[i, j] /= spp
-
+        t1 = 1.0/ (frame_id+1)
+        t2 = 1 - t1
+        buffers.accum_color[i, j] = buffers.accum_color[i, j] * t2 + buffers.color[i, j] * t1
+        buffers.final_buffer[i, j] =  buffers.accum_color[i, j]

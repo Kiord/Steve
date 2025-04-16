@@ -2,12 +2,15 @@ import taichi as ti
 import numpy as np
 from camera import compute_camera_vectors
 from constants import UP
+from app_state import AppState
+
 
 
 class FreeFlyCameraController:
-    def __init__(self, pos=np.array([2.0, 2.0, 2.0], dtype=np.float32),
+    def __init__(self, app_state:AppState, pos=np.array([2.0, 2.0, 2.0], dtype=np.float32),
                  yaw=-135.0, pitch=-45.0, move_speed=1.0, turn_speed=90.0,
                  fov=60):
+        self.app_state = app_state
         self.pos = np.asanyarray(pos)
         self.yaw = yaw
         self.pitch = pitch
@@ -36,8 +39,9 @@ class FreeFlyCameraController:
     def update_from_input(self, gui :ti.ui.Window, dt):
         forward, right, _ = self.get_view_dirs()
 
-        # for e in gui.get_events(ti.ui.PRESS):
-        #     print(f"Pressed key: {e.key}")
+        for key in ["w", "s", "d", "a", " ", "Control", "Left", "Right", "Up", "Down"]:
+            if gui.is_pressed(key):
+                self.app_state.frame_id = 0
 
         if gui.is_pressed("w"):  # Forward
             self.pos += forward * self.move_speed * dt
@@ -48,9 +52,9 @@ class FreeFlyCameraController:
         if gui.is_pressed("d"):  # Right
             self.pos += right * self.move_speed * dt
         if gui.is_pressed(" "):  # Up
-            self.pos += np.array([0, 1, 0], dtype=np.float32) * self.move_speed * dt
+            self.pos += UP * self.move_speed * dt
         if gui.is_pressed('Control'):  # Down
-            self.pos -= np.array([0, 1, 0], dtype=np.float32) * self.move_speed * dt
+            self.pos -= UP * self.move_speed * dt
 
         if gui.is_pressed("Left"):  # Yaw left
             self.yaw -= self.turn_speed * dt
@@ -61,11 +65,11 @@ class FreeFlyCameraController:
         if gui.is_pressed("Down"):  # Pitch down
             self.pitch = max(self.pitch - self.turn_speed * dt, -89.0)
 
-    def update_camera_field(self, camera_field, aspect_ratio):
+    def update_camera_field(self, camera_field):
         forward, _, up = self.get_view_dirs()
         lookat = self.pos + forward
         lower_left_corner, horizontal, vertical = compute_camera_vectors(
-            self.pos, lookat, up, self.fov, aspect_ratio)
+            self.pos, lookat, up, self.fov, self.app_state.aspect_ratio)
 
         camera_field[None].origin = ti.Vector(list(self.pos))
         camera_field[None].lower_left_corner = ti.Vector(list(lower_left_corner))
