@@ -46,6 +46,10 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
                                       specular=ti.Vector([0.0, 0.0, 0.0]),
                                       shininess=0.0,
                                       emissive=ti.Vector([20.0, 0.0, 0.0]) )
+        scene.materials[2] = Material(diffuse=ti.Vector([0.5, 0.5, 0.5]),  
+                                      specular=ti.Vector([1.0, 1.0, 1.0]),
+                                      shininess=100.0,
+                                      emissive=ti.Vector([0.0, 0.0, 0.0]) )
 
         for i in range(4):
             for j in range(4):
@@ -99,7 +103,7 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
         if state.tone_mapping:
             tone_map(final_buffer)
        
-        canvas.set_image(final_buffer)
+        canvas.set_image(state.buffers.normal)
 
         window.show()
 

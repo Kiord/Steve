@@ -124,6 +124,8 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
         #     pdf_total *= p
 
         ds = sample_BSDF(inter.normal, mat, ray.direction, sampler)
+        if ds.pdf < EPS:
+            break
 
         cos_theta = max(0.0, inter.normal.dot(ds.direction))
         throughput *= ds.bsdf * cos_theta
