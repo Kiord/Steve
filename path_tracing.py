@@ -19,23 +19,22 @@ class RenderBuffers:
         self.final_buffer = ti.Vector.field(3, ti.f32, shape=(width, height))
 
 
-# @ti.func
-# def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> (vec3f, ti.f32):  # type: ignore
-#     contrib = vec3f(0.0, 0.0, 0.0)
-#     pdf = 0.0
+@ti.func
+def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> Contribution:  # type: ignore
+    contrib= Contribution(vec3f(0.0, 0.0, 0.0), 0.0)
+    mat = scene.materials[inter.material_id]
+    ds = sample_BSDF(inter.normal, mat, inter.ray.direction, sampler)
+    if ds.pdf > EPS:
+        ray = Ray(inter.point + inter.normal * EPS, ds.direction)
+        inter_check = intersect_scene(ray, scene, EPS, MAX_DIST)
+        mat_check = scene.materials[inter_check.material_id]
+        if inter_check.hit == 1 and mat_check.emissive.norm() > 0:
+            cos_theta = inter_check.normal.dot(ds.direction)
+            if cos_theta > 0.0:
+                contrib.value = ds.bsdf * mat_check.emissive * cos_theta / ds.pdf
+                contrib.pdf = ds.pdf
 
-#     sample = sample_BSDF(inter, inter.ray.direction, sampler)
-#     if sample.pdf > 0:
-#         ray = Ray(inter.point + inter.normal * 1e-3, sample.direction)
-#         inter = intersect_scene(ray, scene, ray.origin, ray.direction, 0.001, 1e5)
-
-#         if inter.hit == 1 and inter.material.emissive.norm() > 0:
-#             cos_theta = inter.normal.dot(sample.direction)
-#             if cos_theta > 0.0:
-#                 contrib = sample.bsdf * inter.material.emissive * cos_theta / sample.pdf
-#                 pdf = sample.pdf
-
-#     return contrib, pdf
+    return contrib
 
 
 @ti.func
@@ -85,7 +84,23 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     return Contribution(value, pdf)
 
 @ti.func
-def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: int, sampler: RandomSampler):  # type: ignore
+def mis_weight(pdf_a: ti.f32, pdf_b: ti.f32) -> ti.f32:# type: ignore
+    denom = pdf_a + pdf_b
+    return min(1,max(0,pdf_a / ti.max(denom, EPS)))
+
+@ti.func
+def sample_mis_contrib(scene: ti.template(), inter: Intersection, sampler: RandomSampler) -> vec3f:  # type: ignore
+    light_contrib = sample_light_contrib(scene, inter, sampler)
+    bsdf_contrib = sample_bsdf_contrib(scene, inter, sampler)
+    
+    # Compute weights
+    w_light = mis_weight(light_contrib.pdf, bsdf_contrib.pdf)
+    w_bsdf  = mis_weight(bsdf_contrib.pdf, light_contrib.pdf)
+
+    return  w_light * light_contrib.value + w_bsdf * bsdf_contrib.value
+    
+@ti.func
+def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSampler):  # type: ignore
     throughput = ti.Vector([1.0, 1.0, 1.0])
     pdf_total = 1.0
     result = ti.Vector([0.0, 0.0, 0.0])
@@ -104,23 +119,24 @@ def path_trace(scene: ti.template(), ray: Ray, i: ti.i32, j: ti.i32, max_depth: 
 
         mat = scene.materials[inter.material_id]
 
-        light_contrib_color = vec3f(0,0,0)
+        contrib_color = vec3f(0,0,0)
         use_emissive = mat.emissive.norm() > 0 and bounce == 0
         if use_emissive:
-            light_contrib_color = mat.emissive
+            contrib_color = mat.emissive
         else:
             if mat.emissive.norm() == 0:
-                light_contrib = sample_light_contrib(scene, inter, sampler)
-                light_contrib_color = light_contrib.value / light_contrib.pdf
+                #light_sampling_contrib = sample_light_contrib(scene, inter, sampler)
+                #contrib_color = light_sampling_contrib.value / light_sampling_contrib.pdf
+                contrib_color = sample_mis_contrib(scene, inter, sampler)
         
-        result += (throughput / pdf_total) * light_contrib_color
+        result += (throughput / pdf_total) * contrib_color
 
 
-        # # Russian roulette after a few bounces
-        if bounce > 2:
-            p = max(throughput.x, throughput.y, throughput.z)
-            if sampler.next() > p:
-                break
+        # Russian roulette after a few bounces
+        # if bounce > 2:
+        #     p = max(throughput.x, throughput.y, throughput.z, EPS)
+        #     if sampler.next() > p:
+        #         break
         #     throughput /= p
         #     pdf_total *= p
 
@@ -162,7 +178,7 @@ def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, max_depth: 
             v = (j + sampler.next()) / height
 
             ray = make_ray(camera[None], u, v)
-            color, aux_albedo, aux_normal = path_trace(scene, ray, i, j, max_depth, sampler)
+            color, aux_albedo, aux_normal = path_trace(scene, ray, max_depth, sampler)
             buffers.color[i, j] += color
             buffers.albedo[i, j] += aux_albedo
             buffers.normal[i, j] += aux_normal
