@@ -21,6 +21,7 @@ class RandomSampler:
 
     @ti.func
     def next(self) -> ti.f32:#type: ignore
+        return ti.random()
         seed = self.i * ti.u32(73856093) ^ self.j * ti.u32(19349663) ^ self.f * ti.u32(83492791) ^ self.counter * ti.u32(2654435761)
         self.counter += 1
         return (ti.sin(seed * 0.0001) * 43758.5453) % 1.0
@@ -121,6 +122,29 @@ def BSDF(material, normal, wi, wo):
     ok = (coswi > 0.0) and (cosr > 0.0) and (coswo > 0.0)
     bsdf = (material.albedo * cosr ** n) * (n + 1.0 + float(is_lambert)) / (2.0 * math.pi)
     return float(ok) * bsdf
+
+@ti.func
+def PDF(material, normal, wi, wo):
+    n = material.shininess
+    is_lambert = n < EPS# 0.0
+    coswi = normal.dot(wi)
+    r = ti.select(is_lambert, normal, reflect(wo, normal))
+    cosr = wi.dot(r)
+    cosr_pow_n = ti.pow(cosr, n)
+    coswo = max(min(normal.dot(wo), 1.0), -1)
+    ok = (coswi > 0.0) and (cosr > 0.0) and (coswo > 0.0)
+    w = (n + 1.0 + ti.cast(is_lambert, ti.f32)) / (2.0 * math.pi)
+    return float(ok) * w * (coswo if is_lambert else cosr_pow_n)
+
+@ti.func
+def PDF_solid_angle_sphere(sphere:Sphere, viewer:vec3f):
+    main_direction = viewer - sphere.center
+    d = main_direction.norm()
+    sinthetamax = sphere.radius / d
+    costhetamax = ti.sqrt(1.0 - sinthetamax*sinthetamax)
+    solid_angle = 2 * ti.math.pi * (1.0 - costhetamax)
+    return 1.0 / solid_angle
+
 
 @ti.func
 def normalize(v):

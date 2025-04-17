@@ -12,6 +12,7 @@ from control import FreeFlyCameraController
 from timer import FrameTimer
 from app_state import AppState
 from ui import build_ui
+from sample_scenes import setup_veach_scene
 
 @click.command()
 @click.option('--profiling', '-p', type=click.BOOL, default=False, help='Ënable profiling')
@@ -45,7 +46,7 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
                                       shininess=0.0,
                                       emissive=ti.Vector([20.0, 0.0, 0.0]))
         scene.materials[2] = Material(albedo=ti.Vector([1.0, 1.0, 1.0]),
-                                shininess=50.0,
+                                shininess=5000.0,
                                 emissive=ti.Vector([0.0, 0.0, 0.0]))
 
 
@@ -54,20 +55,25 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
                 scene.add_sphere([i, 0.5 + 0.0*float(i!=1 and j!=1), j], 0.5, int(i==1 and j==1))
 
         scene.spheres[1].center -= ti.Vector([10,0,0])
+  
+        #scene.add_sphere([-2,1,-2], 1, 1)
 
-        scene.add_sphere([-2,1,-2], 1, 2)
+        scene.add_plane([0,0,0], [0,1,0], 2)
 
-        scene.add_plane([0,0,0], [0,1,0], 0)
-
-        scene.add_triangle([0,0,0], [5,5,5], [0,0,5], 2)
+        #scene.add_triangle([0,0,0], [5,5,5], [0,0,5], 2)
 
     scene = Scene()
-    setup_scene(scene)
+    #setup_scene(scene)
+
+    
 
     camera = Camera.field(shape=())
     camera_controller = FreeFlyCameraController(state)
     camera_controller.update_camera_field(camera)
 
+
+    setup_veach_scene(scene, camera_controller)
+    #setup_scene(scene)
     #build_ui(state)
     #threading.Thread(target=dpg.start_dearpygui, daemon=True).start()
 

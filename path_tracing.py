@@ -4,7 +4,7 @@ import math
 from datatypes import vec3f
 from scene import Material, environment_color
 from camera import make_ray
-from utils import (Contribution, RandomSampler, sample_BSDF, sample_sphere_solid_angle, BSDF, 
+from utils import (Contribution, RandomSampler, sample_BSDF, sample_sphere_solid_angle, BSDF, PDF, PDF_solid_angle_sphere,
                    sample_sphere_uniform, sample_sphere_hemisphere_cosine, sample_sphere_hemisphere_uniform,
                     )
 from constants import EPS, MAX_DIST
@@ -24,17 +24,23 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
     contrib= Contribution(vec3f(0.0, 0.0, 0.0), 0.0)
     mat = scene.materials[inter.material_id]
     ds = sample_BSDF(inter.normal, mat, inter.ray.direction, sampler)
+    pdf_light = 0
     if ds.pdf > EPS:
         ray = Ray(inter.point + inter.normal * EPS, ds.direction)
         inter_check = intersect_scene(ray, scene, EPS, MAX_DIST)
         mat_check = scene.materials[inter_check.material_id]
         if inter_check.hit == 1 and mat_check.emissive.norm() > 0:
+            
+            light_sphere = scene.spheres[inter_check.sphere_id]
+            N = ti.cast(scene.num_light_spheres[None], ti.f32)
+            pdf_light = PDF_solid_angle_sphere(light_sphere, inter.point) / N
+
             cos_theta = inter_check.normal.dot(ds.direction)
             if cos_theta > 0.0:
                 contrib.value = ds.bsdf * mat_check.emissive * cos_theta / ds.pdf
                 contrib.pdf = ds.pdf
 
-    return contrib
+    return contrib, pdf_light
 
 
 @ti.func
@@ -44,8 +50,9 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     light_sphere_id = min(int(u * scene.num_light_spheres[None]), scene.num_light_spheres[None]-1)
     sphere_id = scene.light_spheres_id[light_sphere_id]
     light_sphere = scene.spheres[sphere_id]
-    mat = scene.materials[light_sphere.material_id]
-    light_color = mat.emissive;
+    emissive_mat = scene.materials[light_sphere.material_id]
+    light_color = emissive_mat.emissive
+    inter_mat = scene.materials[inter.material_id]
     
     sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
     #sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
@@ -57,7 +64,9 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     point_to_sample = sls.point - inter.point
     dist = point_to_sample.norm()
     point_to_sample /= dist 
-    bsdf = BSDF(mat, inter.normal, -inter.ray.direction, point_to_sample)
+    bsdf = BSDF(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
+
+    pdf_surface = PDF(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
 
     cosi = abs(inter.normal.dot(point_to_sample))
     prod = bsdf * cosi
@@ -67,42 +76,32 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     if prod.norm() > 0.0:
         ray_light = Ray(inter.point, point_to_sample)
         inter_light = intersect_scene(ray_light, scene, EPS, dist-EPS)
-        v = 1
-        if inter_light.hit:# and (inter_light.sphere_id != sphere_id):
-            v = 0
-        # if sls.normal.dot(point_to_sample) > 0:
-        #     v = 0 # ...
+        v = float(inter_light.hit == 0) 
+        value = v * light_color  * prod / pdf
 
-        #print(inter.point, sls.point, sls.point-inter.point)
-        #v = visibility(scene, inter.point, sls.point)
-        #v =  float(inter_light.hit == 0 or abs(inter_light.t - dist) < EPS or inter_light.t < EPS)
-        
-        #v = visibility(ray_light, scene, sls.point)
-
-        value = v * light_color  * prod
-
-    return Contribution(value, pdf)
+    return Contribution(value, pdf), pdf_surface
 
 @ti.func
-def mis_weight(pdf_a: ti.f32, pdf_b: ti.f32) -> ti.f32:# type: ignore
+def balance_heuristic(pdf_a: ti.f32, pdf_b: ti.f32) -> ti.f32:# type: ignore
     denom = pdf_a + pdf_b
     return min(1,max(0,pdf_a / ti.max(denom, EPS)))
 
 @ti.func
 def sample_mis_contrib(scene: ti.template(), inter: Intersection, sampler: RandomSampler) -> vec3f:  # type: ignore
-    light_contrib = sample_light_contrib(scene, inter, sampler)
-    bsdf_contrib = sample_bsdf_contrib(scene, inter, sampler)
-    
+    light_contrib, pdf_surface = sample_light_contrib(scene, inter, sampler)
+    bsdf_contrib, pdf_light = sample_bsdf_contrib(scene, inter, sampler)
     # Compute weights
-    w_light = mis_weight(light_contrib.pdf, bsdf_contrib.pdf)
-    w_bsdf  = mis_weight(bsdf_contrib.pdf, light_contrib.pdf)
+    w_light = balance_heuristic(light_contrib.pdf, pdf_surface)
+    w_bsdf  = balance_heuristic(bsdf_contrib.pdf, pdf_light)
 
     return  w_light * light_contrib.value + w_bsdf * bsdf_contrib.value
-    
+    #return vec3f(light_contrib.pdf, bsdf_contrib.pdf, 0)
+
 @ti.func
 def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSampler):  # type: ignore
-    throughput = ti.Vector([1.0, 1.0, 1.0])
-    pdf_total = 1.0
+    prod_color = vec3f(1.0)
+    prod_ratio = vec3f(1.0)
+    prod_pdf = 1.0
     result = ti.Vector([0.0, 0.0, 0.0])
     aux_albedo = ti.Vector([0.0, 0.0, 0.0])
     aux_normal = ti.Vector([0.0, 0.0, 0.0])
@@ -112,24 +111,26 @@ def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSa
 
         if not inter.hit:
             env_color = environment_color(ray.direction, scene)
-            result += (throughput / pdf_total) * env_color
+            result += prod_ratio * env_color
             if bounce == 0:
                 aux_albedo = env_color
             break
 
         mat = scene.materials[inter.material_id]
 
-        contrib_color = vec3f(0,0,0)
+        contrib = vec3f(0,0,0)
         use_emissive = mat.emissive.norm() > 0 and bounce == 0
         if use_emissive:
-            contrib_color = mat.emissive
+            contrib = mat.emissive
         else:
             if mat.emissive.norm() == 0:
                 #light_sampling_contrib = sample_light_contrib(scene, inter, sampler)
-                #contrib_color = light_sampling_contrib.value / light_sampling_contrib.pdf
-                contrib_color = sample_mis_contrib(scene, inter, sampler)
+                #contrib = light_sampling_contrib.value / light_sampling_contrib.pdf
+                contrib = sample_mis_contrib(scene, inter, sampler)
         
-        result += (throughput / pdf_total) * contrib_color
+        result += prod_ratio * contrib
+
+        #result += prod_ratio * mat.emissive
 
 
         # Russian roulette after a few bounces
@@ -146,8 +147,9 @@ def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSa
             break
 
         cos_theta = max(0.0, inter.normal.dot(ds.direction))
-        throughput *= ds.bsdf * cos_theta
-        pdf_total *= ds.pdf
+        prod_color *= ds.bsdf * cos_theta
+        prod_pdf *= ds.pdf
+        prod_ratio = prod_color / ti.max(prod_pdf, EPS)
 
         # Update ray
         ray.origin = inter.point + inter.normal * EPS

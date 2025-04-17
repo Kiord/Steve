@@ -2,7 +2,7 @@ import numpy as np
 MAX_SPHERES = 100
 MAX_TRIANGLES = 1_000
 MAX_PLANES = 16
-MAX_MATERIALS = 8
+MAX_MATERIALS = 100
 EPS = 1e-5
 MAX_DIST = 1e5
 UP = np.array([0,1,0], dtype=np.float32)
