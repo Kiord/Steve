@@ -32,7 +32,7 @@ def setup_veach_scene(scene:Scene, ffcc:FFCC):
     shift = np.array([-7.0, 0, 0])
     base = np.array([10.0 , -5.0, 18.0])
     for i in range(4):
-        material_id = scene.add_material([1,1,1], np.array(sphere_colors[i]) * color_multipliers[i] / sphere_sizes[i], 0)
+        material_id = scene.add_material([0,0,0], np.array(sphere_colors[i]) * color_multipliers[i] / sphere_sizes[i], 0)
         scene.add_sphere(scene_scale * (base + shift * i), scene_scale * sphere_sizes[i], material_id)
 
     # Panels

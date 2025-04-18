@@ -35,7 +35,7 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
             N = ti.cast(scene.num_light_spheres[None], ti.f32)
             pdf_light = PDF_solid_angle_sphere(light_sphere, inter.point) / N
 
-            cos_theta = inter_check.normal.dot(ds.direction)
+            cos_theta = inter.normal.dot(ds.direction)
             if cos_theta > 0.0:
                 contrib.value = ds.bsdf * mat_check.emissive * cos_theta / ds.pdf
                 contrib.pdf = ds.pdf
