@@ -146,11 +146,8 @@ def visibility(scene:ti.template(), a:vec3f, b:vec3f)->ti.f32: #type: ignore
     dist = ab.norm()
     ab /= dist
     ray = Ray(a, ab)
-    inter = intersect_scene(ray, scene, 0, dist)
-    return float(inter.hit == 0 or (inter.point-b).norm() < EPS)
-    # return float(inter.hit == 0 
-    #              or inter.t < EPS 
-    #              or (inter.point-b).norm()<EPS)
+    inter = intersect_scene(ray, scene, EPS, dist-EPS)
+    return float(inter.hit == 0 or (inter.point-b).norm() < EPS * 10)
 
 
 # @ti.func

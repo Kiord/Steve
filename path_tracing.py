@@ -5,7 +5,7 @@ from datatypes import vec3f
 from scene import Material, environment_color
 from camera import make_ray
 from utils import (Contribution, RandomSampler, sample_BSDF, sample_sphere_solid_angle, BSDF, PDF, PDF_solid_angle_sphere,
-                   sample_sphere_uniform, sample_sphere_hemisphere_cosine, sample_sphere_hemisphere_uniform,
+                   sample_sphere_uniform, sample_sphere_hemisphere_cosine, sample_sphere_hemisphere_uniform, SurfaceLightSample
                     )
 from constants import EPS, MAX_DIST
 
@@ -24,7 +24,7 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
     contrib= Contribution(vec3f(0.0, 0.0, 0.0), 0.0)
     mat = scene.materials[inter.material_id]
     ds = sample_BSDF(inter.normal, mat, inter.ray.direction, sampler)
-    pdf_light = 0
+    pdf_light = 0.0
     if ds.pdf > EPS:
         ray = Ray(inter.point + inter.normal * EPS, ds.direction)
         inter_check = intersect_scene(ray, scene, EPS, MAX_DIST)
@@ -32,8 +32,8 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
         if inter_check.hit == 1 and mat_check.emissive.norm() > 0:
             
             light_sphere = scene.spheres[inter_check.sphere_id]
-            N = ti.cast(scene.num_light_spheres[None], ti.f32)
-            pdf_light = PDF_solid_angle_sphere(light_sphere, inter.point) / N
+
+            pdf_light = PDF_solid_angle_sphere(light_sphere, inter.point) / scene.num_light_spheres[None]
 
             cos_theta = inter.normal.dot(ds.direction)
             if cos_theta > 0.0:
@@ -53,30 +53,45 @@ def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: Ran
     emissive_mat = scene.materials[light_sphere.material_id]
     light_color = emissive_mat.emissive
     inter_mat = scene.materials[inter.material_id]
-    
-    sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
-    #sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
-    #sls = sample_sphere_hemisphere_uniform(inter.point, light_sphere, sampler)
-    #sls = sample_sphere_hemisphere_cosine(inter.point, light_sphere, sampler)
+
+    use_area_based_sampling = False
+
+    sls = SurfaceLightSample()
+    if use_area_based_sampling:
+        #sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
+        #sls = sample_sphere_hemisphere_uniform(inter.point, light_sphere, sampler)
+        sls = sample_sphere_hemisphere_cosine(inter.point, light_sphere, sampler)
+    else:
+        sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
+   
+
+
     
     pdf = sls.pdf / scene.num_light_spheres[None]
 
     point_to_sample = sls.point - inter.point
     dist = point_to_sample.norm()
-    point_to_sample /= dist 
+    point_to_sample /= dist
+
+    if use_area_based_sampling:
+        # Remap pdf to area pdf
+        cosl = sls.normal.dot(-point_to_sample)
+        SA_to_area = cosl/(dist*dist);
+        pdf /= SA_to_area;
+
     bsdf = BSDF(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
 
     pdf_surface = PDF(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
 
     cosi = abs(inter.normal.dot(point_to_sample))
     prod = bsdf * cosi
-
     value = vec3f(0.0)
 
     if prod.norm() > 0.0:
-        ray_light = Ray(inter.point, point_to_sample)
-        inter_light = intersect_scene(ray_light, scene, EPS, dist-EPS)
-        v = float(inter_light.hit == 0) 
+        # ray_light = Ray(inter.point, point_to_sample)
+        # inter_light = intersect_scene(ray_light, scene, EPS, dist-EPS)
+        # v = float(inter_light.hit == 0 or (inter_light.point - sls.point).norm() < 1e-4) 
+        v = visibility(scene, inter.point + EPS * inter.normal, sls.point)
         value = v * light_color  * prod / pdf
 
     return Contribution(value, pdf), pdf_surface
@@ -93,6 +108,8 @@ def sample_mis_contrib(scene: ti.template(), inter: Intersection, sampler: Rando
     # Compute weights
     w_light = balance_heuristic(light_contrib.pdf, pdf_surface)
     w_bsdf  = balance_heuristic(bsdf_contrib.pdf, pdf_light)
+    # w_light = balance_heuristic(light_contrib.pdf, bsdf_contrib.pdf)
+    # w_bsdf  = balance_heuristic(bsdf_contrib.pdf, light_contrib.pdf)
 
     return  w_light * light_contrib.value + w_bsdf * bsdf_contrib.value
     #return vec3f(light_contrib.pdf, bsdf_contrib.pdf, 0)

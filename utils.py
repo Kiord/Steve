@@ -103,12 +103,13 @@ def sample_BSDF(normal: vec3f, material:Material, incoming_dir: vec3f, sampler: 
     ok = coswo > 0.0
     cosr_pow_n = ti.pow(abs(cosr), n)
 
-    w = (n + 1.0 + ti.cast(is_lambert, ti.f32)) / (2.0 * math.pi)
+    w = (n + 1.0 + float(is_lambert)) / (2.0 * math.pi)
 
     sampled.pdf = float(ok) * w * (coswo if is_lambert else cosr_pow_n)
     sampled.bsdf = float(ok) * w * material.albedo * cosr_pow_n
 
     return sampled
+
 
 
 @ti.func
@@ -120,7 +121,9 @@ def BSDF(material, normal, wi, wo):
     cosr = wi.dot(r)
     coswo = max(min(normal.dot(wo), 1.0), -1)
     ok = (coswi > 0.0) and (cosr > 0.0) and (coswo > 0.0)
-    bsdf = (material.albedo * cosr ** n) * (n + 1.0 + float(is_lambert)) / (2.0 * math.pi)
+    #ok = (coswi > 0.0) and (coswo > 0.0)
+    #ok = (cosr > 0.0) #and (coswo > 0.0)
+    bsdf = (material.albedo * ti.pow(cosr, n)) * (n + 1.0 + float(is_lambert)) / (2.0 * math.pi)
     return float(ok) * bsdf
 
 @ti.func
@@ -133,7 +136,7 @@ def PDF(material, normal, wi, wo):
     cosr_pow_n = ti.pow(cosr, n)
     coswo = max(min(normal.dot(wo), 1.0), -1)
     ok = (coswi > 0.0) and (cosr > 0.0) and (coswo > 0.0)
-    w = (n + 1.0 + ti.cast(is_lambert, ti.f32)) / (2.0 * math.pi)
+    w = (n + 1.0 + float(is_lambert)) / (2.0 * math.pi)
     return float(ok) * w * (coswo if is_lambert else cosr_pow_n)
 
 @ti.func
