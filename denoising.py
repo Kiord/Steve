@@ -4,7 +4,7 @@ import taichi as ti
 def bilateral_filter(buffers: ti.template(), sigma_color: ti.f32, sigma_normal: ti.f32, sigma_spatial: ti.f32, radius: ti.i32): # type:ignore
     for i, j in buffers.color:
 
-        center_color = buffers.color[i, j]
+        center_color = buffers.accum_color[i, j]
         center_albedo = buffers.albedo[i, j]
         center_normal = buffers.normal[i, j]
 
@@ -15,8 +15,8 @@ def bilateral_filter(buffers: ti.template(), sigma_color: ti.f32, sigma_normal: 
             for dy in range(-radius, radius + 1):
                 ni = i + dx
                 nj = j + dy
-                if 0 <= ni < buffers.color.shape[0] and 0 <= nj < buffers.color.shape[1]:
-                    sample_color = buffers.color[ni, nj]
+                if 0 <= ni < buffers.accum_color.shape[0] and 0 <= nj < buffers.accum_color.shape[1]:
+                    sample_color = buffers.accum_color[ni, nj]
                     sample_albedo = buffers.albedo[ni, nj]
                     sample_normal = buffers.normal[ni, nj]
 

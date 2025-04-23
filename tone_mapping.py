@@ -37,7 +37,7 @@ def exposure_correct(col: vec3f, linfac: float, logfac: float): # type: ignore
 def aces_filmic_tone_map(col: vec3f): # type: ignore
     W = 10.2
     ExposureBias = 2.0
-    curr = uncharted2_tonemap(col * ExposureBias)
+    curr = uncharted2_tonemap(col) * ExposureBias
     white_scale = uncharted2_tonemap(vec3f([W, W, W]))
     curr /= white_scale
     return linear_to_gamma(curr)
@@ -45,4 +45,5 @@ def aces_filmic_tone_map(col: vec3f): # type: ignore
 @ti.kernel
 def tone_map(buffer:ti.template()): # type: ignore
     for i, j in buffer:
+        buffer[i, j] = exposure_correct(buffer[i, j], 2.1, -0.8)
         buffer[i, j] = aces_filmic_tone_map(buffer[i, j])

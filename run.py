@@ -21,10 +21,13 @@ from sample_scenes import setup_veach_scene
 @click.option('--size', '-s', type=(int, int), default=(800, 600), help='Viewport size as WIDTH HEIGHT')
 @click.option('--spp', type=int, default=1, help='Samples per pixel')
 @click.option('--max_depth', '-md', type=int, default=5, help='Max path depth')
-@click.option('--device', type=click.Choice(['cpu', 'gpu'], case_sensitive=False), default='cpu', help='Device to run on')
-def cli(profiling, denoising, tone_mapping, size, spp, max_depth, device):
-    
-    arch = {'cpu':ti.cpu, 'gpu':ti.gpu}[device.lower()]
+@click.option('--arch', type=click.Choice(['cpu', 'gpu', 'vulkan', 'opengl'], case_sensitive=False), default='cpu', help='Device to run on')
+def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
+    arch = arch.lower()
+    if hasattr(ti, arch):
+        arch = getattr(ti, arch)
+    else:
+        print(f'[Error] unavailable backend "{arch}"')
 
     ti.init(arch=arch, default_fp=ti.f32, kernel_profiler=profiling)
     import time

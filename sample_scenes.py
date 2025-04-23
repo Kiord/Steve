@@ -47,10 +47,10 @@ def setup_veach_scene(scene:Scene, ffcc:FFCC):
         material_id = scene.add_material([1,1,1], [0,0,0], multiplier * shininesses[i])
         scene.add_quad(offset + shifts[i], scale, [1,0,0], -angles[i], material_id)
 
-    scene.ground_color[None] =  ti.Vector([0,0,0])
-    scene.horizon_color[None] = ti.Vector([0,0,0])
-    scene.sky_color[None] = ti.Vector([0,0,0])
-    scene.sun_color[None] = ti.Vector([0,0,0])
+    # scene.ground_color[None] =  ti.Vector([0,0,0])
+    # scene.horizon_color[None] = ti.Vector([0,0,0])
+    # scene.sky_color[None] = ti.Vector([0,0,0])
+    # scene.sun_color[None] = ti.Vector([0,0,0])
 
     # mat2 = scene.add_material([0.0,0.0,.0], [20.0,0,0], 0) 
 
