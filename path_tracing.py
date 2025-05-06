@@ -169,7 +169,7 @@ def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSa
         prod_ratio = prod_color / ti.max(prod_pdf, EPS)
 
         # Update ray
-        ray.origin = inter.point + inter.normal * EPS
+        ray.origin = inter.point + inter.normal_geom * EPS
         ray.direction = ds.direction
 
         if bounce == 0:

@@ -3,6 +3,8 @@ from datatypes import vec3f
 from constants import *
 import numpy as np
 import math
+import trimesh as tm
+from typing import Optional
 
 @ti.dataclass
 class Material:
@@ -30,6 +32,9 @@ class Triangle:
     v1: vec3f #type:ignore
     v2: vec3f #type:ignore
     normal: vec3f  # optional precomputed #type:ignore
+    n0: vec3f #type:ignore
+    n1: vec3f #type:ignore
+    n2: vec3f #type:ignore
     material_id: ti.i32 #type:ignore
 
 @ti.dataclass
@@ -77,6 +82,8 @@ class Scene:
 
     def add_sphere(self, center:np.ndarray, radius:float, material_id:int):
         idx = self.num_spheres[None]
+        if idx >= MAX_SPHERES:
+            return -1
         self.num_spheres[None] += 1
         self.spheres[idx] = Sphere(ti.Vector(list(center)), radius, material_id)
         if self.materials[material_id].emissive.norm() > 0.0:
@@ -87,25 +94,40 @@ class Scene:
         
     def add_plane(self, point:np.ndarray, normal:np.ndarray, material_id:int):
         idx = self.num_planes[None]
+        if idx >= MAX_PLANES:
+            return -1
         self.num_planes[None] += 1
         self.planes[idx] =  Plane(point=ti.Vector(list(point)), normal=ti.Vector(list(normal)), material_id=material_id)
         if self.materials[material_id].emissive.norm() > 0.0:
             print("[Warning] Plane lights are not supported.")
         return idx
     
-    def add_triangle(self, v0:np.ndarray, v1:np.ndarray, v2:np.ndarray, material_id:int):
+    def add_triangle(self, v0:np.ndarray, v1:np.ndarray, v2:np.ndarray, material_id:int,
+                     n0:Optional[np.ndarray]=None, n1:Optional[np.ndarray]=None, n2:Optional[np.ndarray]=None):
+        idx = self.num_triangles[None]
+        if idx >= MAX_TRIANGLES:
+            return -1
+        self.num_triangles[None] += 1
+
         v0 = np.asanyarray(v0)
         v1 = np.asanyarray(v1)
         v2 = np.asanyarray(v2)
-        idx = self.num_triangles[None]
-        self.num_triangles[None] += 1
         normal = np.cross(v1-v0, v2-v1)
         normal = normal / np.linalg.norm(normal)
+        n0 = normal if n0 is None else np.asanyarray(n0)
+        n1 = normal if n1 is None else np.asanyarray(n1)
+        n2 = normal if n2 is None else np.asanyarray(n2)
+        if normal.dot(n0 + n1 + n2) < 0:
+            normal = -normal
+       
         self.triangles[idx] =  Triangle(
             v0=ti.Vector(list(v0)),
             v1=ti.Vector(list(v1)), 
             v2=ti.Vector(list(v2)), 
             normal=ti.Vector(list(normal)),
+            n0=ti.Vector(list(n0)),
+            n1=ti.Vector(list(n1)),
+            n2=ti.Vector(list(n2)),
             material_id=material_id)
         if self.materials[material_id].emissive.norm() > 0.0:
             print("[Warning] Triangle lights are not supported.")
@@ -134,6 +156,16 @@ class Scene:
         id1 = self.add_triangle(fl, fr, br, material_id)
         id2 = self.add_triangle(br, bl, fl, material_id)
         return id1, id2
+    
+    def add_mesh(self, mesh:tm.Trimesh, material_id:int):
+        indices = []
+        for f in mesh.faces:
+            v0, v1, v2 = mesh.vertices[f]
+            n0, n1, n2 = mesh.vertex_normals[f]
+            idx = self.add_triangle(v0, v1, v2, material_id, n0, n1, n2)
+            indices.append(idx)
+        return indices
+
 
 @ti.func
 def environment_color(view_dir: vec3f, scene:ti.template()) -> vec3f: # type: ignore

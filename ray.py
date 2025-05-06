@@ -13,6 +13,7 @@ class Intersection:
     hit: ti.i32     # type:ignore              
     point: vec3f # type:ignore
     normal: vec3f # type:ignore
+    normal_geom: vec3f # type:ignore
     t: ti.f32 # type:ignore
     front_face: ti.i32 # type:ignore
     material_id: ti.i32 # type:ignore
@@ -28,6 +29,7 @@ def empty_intersection(ray:Ray) -> Intersection:
         hit=0,
         point=vec3f(0.0, 0.0, 0.0),
         normal=vec3f(0.0, 0.0, 0.0),
+        normal_geom=vec3f(0.0, 0.0, 0.0),
         t=MAX_DIST,
         front_face=1,
         material_id=-1,
@@ -60,6 +62,7 @@ def ray_sphere_intersection(ray: Ray, sphere: Sphere, inter: ti.template(), sphe
             inter.t = root
             inter.point = point
             inter.normal = normal
+            inter.normal_geom = normal
             inter.front_face = front_face
             inter.material_id = sphere.material_id
             inter.hit = 1
@@ -81,6 +84,7 @@ def ray_plane_intersection(ray: Ray, plane: Plane, inter: ti.template(), plane_i
             inter.t = t
             inter.point = hit_point
             inter.normal = normal
+            inter.normal_geom = normal
             inter.front_face = front_face
             inter.material_id = plane.material_id
             inter.hit = 1
@@ -103,20 +107,22 @@ def ray_triangle_intersection(ray: Ray, tri: Triangle, inter: ti.template(), tri
         if 0.0 <= u <= 1.0:
             q = s.cross(edge1)
             v = f * ray.direction.dot(q)
-
+            
             if 0.0 <= v <= 1.0 and u + v <= 1.0:
                 t = f * edge2.dot(q)
                 t_max_ = ti.min(inter.t, t_max)
 
                 if t > t_min and t < t_max_:
                     hit_point = ray.origin + t * ray.direction
-                    normal = edge1.cross(edge2).normalized()
-                    front_face = 1 if ray.direction.dot(normal) < 0 else 0
-                    final_normal = normal if front_face else -normal
+                    w = 1 - u - v
 
+                    normal = (w * tri.n0 + u * tri.n1 + v * tri.n2).normalized()
+                    front_face = 1 if ray.direction.dot(tri.normal) < 0 else 0
+                    final_normal = normal if front_face else -normal
                     inter.t = t
                     inter.point = hit_point
                     inter.normal = final_normal
+                    inter.normal_geom = tri.normal
                     inter.front_face = front_face
                     inter.material_id = tri.material_id
                     inter.hit = 1
