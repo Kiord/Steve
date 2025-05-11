@@ -53,6 +53,8 @@ class BVHNode:
 class BVHInfo:
     triangle_offset: ti.i32 # type: ignore
     num_nodes: ti.i32 # type: ignore
+    transform: ti.types.matrix(4, 4, ti.f32) # type: ignore
+    inv_transform: ti.types.matrix(4, 4, ti.f32) # type: ignore
 
 #upload_free_triangles(self.free_triangles, free_tri_offset, Nt, triangle_ids)
 @ti.kernel
@@ -265,7 +267,7 @@ class Scene:
         upload_free_triangles(self.free_triangles, free_tri_offset, Nt, triangle_ids)
 
 
-    def add_mesh_bvh(self, mesh:tm.Trimesh, bvh_dict:dict, material_id:int):
+    def add_mesh_bvh(self, mesh:tm.Trimesh, bvh_dict:dict, material_id:int, transform:np.ndarray=None):
         bvh_id = self.num_bvhs[None]
         Nt = len(mesh.faces)
         tri_offset = self.num_triangles[None]
@@ -278,7 +280,6 @@ class Scene:
             print("[Scene] Not enough triangle slots!")
             return -1
         
-   
 
         is_leaf, left_or_start, right_or_count, aabb_min, aabb_max, depth, max_leaf_size, binned, torder = bvh_dict.values()
         Nn = len(is_leaf)
@@ -309,6 +310,11 @@ class Scene:
         upload_bvh(self.bvhs, bvh_id, Nn, is_leaf, left_or_start, right_or_count, aabb_min, aabb_max, depth)
         self.bvh_infos.triangle_offset[bvh_id] = tri_offset
         self.bvh_infos.num_nodes[bvh_id] = Nn
+        if transform is None:
+            transform = np.identity(4, dtype=np.float32)
+        inv_transform = np.linalg.inv(transform)
+        self.bvh_infos.transform[bvh_id] = ti.Matrix(transform.tolist())
+        self.bvh_infos.inv_transform[bvh_id] = ti.Matrix(inv_transform.tolist())
 
         return bvh_id
 

@@ -19,8 +19,8 @@ A lightweight path tracing viewer and renderer written in Taichi
 - ✅ Analytic environnment map
 - ✅ Pixel-stable sampler
 - ✅ Mesh loading
+- ✅ BVH
 - 🟡 CLI
-- 🟡 BVH
 - ❌ Environment map sampling
 - ❌ Texture & normal mapping
 - ❌ More materials (GGX ? Disney BSDF?)

@@ -84,3 +84,25 @@ def setup_suzanne_scene(scene:Scene, ffcc:FFCC):
 
     #scene.add_mesh(mesh, diffuse_white)
     scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white)
+    t = np.array([
+        [1, 0, 0, 2],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+    ], dtype=np.float32)
+    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white, t)
+    t = np.array([
+        [0, 1, 0, 1],
+        [1, 0, 0, 0],
+        [0, 0, 1, 2],
+        [0, 0, 0, 1],
+    ], dtype=np.float32)
+    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white, t)
+
+    t = np.array([
+        [2, 0, 0, 0],
+        [0, 0.5, 0, 0],
+        [0, 0, 1, 4],
+        [0, 0, 0, 1],
+    ], dtype=np.float32)
+    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white, t)

@@ -326,7 +326,6 @@ def sample_sphere_hemisphere_cosine(viewer: vec3f, sphere: Sphere, sampler: Rand
 
     return sls
 
-
 def load_mesh(filename:str):
     import trimesh as tm
     import os
