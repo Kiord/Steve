@@ -106,3 +106,34 @@ def setup_suzanne_scene(scene:Scene, ffcc:FFCC):
         [0, 0, 0, 1],
     ], dtype=np.float32)
     scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white, t)
+
+def setup_dragon_scene(scene:Scene, ffcc:FFCC):
+    # Camera
+
+    # ffcc.pos = np.array([0.0,-10.0, -40.0]) * scene_scale
+    # ffcc.yaw = 90
+    # ffcc.pitch = -math.degrees(0.1)
+    
+    # ffcc.fov = 40
+    mesh, bvh_dict = load_mesh('bunny.stl')
+    print_bvh_summary(bvh_dict)
+    s = 1.0 / mesh.scale
+
+    centroid = mesh.centroid * s
+    ffcc.set_look_at(centroid + [s, s, s], centroid)
+    #ffcc.move_speed = mesh.scale
+    # print(mesh)
+    # plotter = pv.Plotter()
+    # plotter.add_mesh(mesh)
+    # plotter.add_arrows(mesh.vertices, mesh.vertex_normals, mag=0.1)
+    # plotter.show()
+    diffuse_white = scene.add_material([1,1,1],[0,0,0], 0)
+
+    
+    t = np.array([
+        [s, 0, 0, 0],
+        [0, s, 0, 0],
+        [0, 0, s, 0],
+        [0, 0, 0, 1],
+    ], dtype=np.float32)
+    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white, t)

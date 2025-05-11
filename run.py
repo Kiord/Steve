@@ -11,7 +11,7 @@ from control import FreeFlyCameraController
 from timer import FrameTimer
 from app_state import AppState
 from ui import build_ui
-from sample_scenes import setup_veach_scene, setup_suzanne_scene
+from sample_scenes import setup_veach_scene, setup_suzanne_scene, setup_dragon_scene
 
 @click.command()
 @click.option('--profiling', '-p', type=click.BOOL, default=False, help='Ënable profiling')
@@ -51,7 +51,8 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
 
 
     #setup_veach_scene(scene, camera_controller)
-    setup_suzanne_scene(scene, camera_controller)
+    #setup_suzanne_scene(scene, camera_controller)
+    setup_dragon_scene(scene, camera_controller)
     #setup_scene(scene)
     #build_ui(state)
     #threading.Thread(target=dpg.start_dearpygui, daemon=True).start()

@@ -17,6 +17,15 @@ class FreeFlyCameraController:
         self.move_speed = move_speed
         self.turn_speed = turn_speed
         self.fov = fov
+    
+    def set_look_at(self, pos:np.ndarray, target:np.ndarray):
+        self.pos = np.asanyarray(pos, dtype=np.float32)
+        dir = target - pos
+        dir = dir / np.linalg.norm(dir)
+
+        # Calculate pitch and yaw from direction vector
+        self.pitch = np.degrees(np.arcsin(dir[1]))  # arcsin(y)
+        self.yaw = np.degrees(np.arctan2(dir[2], dir[0]))  # atan2(z, x)
 
     def get_view_dirs(self):
         yaw_rad = np.radians(self.yaw)
