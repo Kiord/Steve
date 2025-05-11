@@ -571,7 +571,7 @@ def aabbs_to_mesh(aabb_min, aabb_max):
 if __name__ == '__main__':
     import trimesh as tm
     from time import time
-    mesh = tm.load_mesh('data/meshes/dragon_vrip.ply')
+    mesh = tm.load_mesh('data/meshes/bunny.stl')
     print(mesh)
     bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4)
     bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4)

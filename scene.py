@@ -47,6 +47,7 @@ class BVHNode:
     right_or_count: ti.i32 # type: ignore
     aabb_min: vec3f # type: ignore
     aabb_max: vec3f # type: ignore
+    depth: ti.i32 # type: ignore
 
 @ti.dataclass
 class BVHInfo:
@@ -98,6 +99,7 @@ def upload_bvh(
     right_or_count: ti.types.ndarray(), # type: ignore
     aabb_min: ti.types.ndarray(), # type: ignore
     aabb_max: ti.types.ndarray(), # type: ignore
+    depth: ti.types.ndarray(), # type: ignore
 ):
     for i in range(node_count):
         bvhs.is_leaf[bvh_id, i] = is_leaf[i]
@@ -105,6 +107,7 @@ def upload_bvh(
         bvhs.right_or_count[bvh_id, i] = right_or_count[i]
         bvhs.aabb_min[bvh_id, i] = ti.Vector([aabb_min[i, 0], aabb_min[i, 1], aabb_min[i, 2]], dt=ti.f32)
         bvhs.aabb_max[bvh_id, i] = ti.Vector([aabb_max[i, 0], aabb_max[i, 1], aabb_max[i, 2]], dt=ti.f32)
+        bvhs.depth[bvh_id, i] = depth[i]
 
 
 class Scene:
@@ -256,7 +259,7 @@ class Scene:
         n1 = np.ascontiguousarray(face_vertex_normals[:, 1])
         n2 = np.ascontiguousarray(face_vertex_normals[:, 2])
         mid = np.full((Nt,), material_id, dtype=np.int32)
-        triangle_ids = np.arange(tri_offset, tri_offset + Nt)
+        triangle_ids = np.arange(tri_offset, tri_offset + Nt, dtype=np.int32)
 
         upload_triangles(self.triangles, tri_offset, Nt, v0, v1, v2, n, n0, n1, n2, mid)
         upload_free_triangles(self.free_triangles, free_tri_offset, Nt, triangle_ids)
@@ -303,7 +306,7 @@ class Scene:
                          n0[torder], n1[torder], n2[torder], mid[torder])
 
 
-        upload_bvh(self.bvhs, bvh_id, Nn, is_leaf, left_or_start, right_or_count, aabb_min, aabb_max)
+        upload_bvh(self.bvhs, bvh_id, Nn, is_leaf, left_or_start, right_or_count, aabb_min, aabb_max, depth)
         self.bvh_infos.triangle_offset[bvh_id] = tri_offset
         self.bvh_infos.num_nodes[bvh_id] = Nn
 

@@ -70,7 +70,7 @@ def setup_suzanne_scene(scene:Scene, ffcc:FFCC):
     # ffcc.pitch = -math.degrees(0.1)
     
     # ffcc.fov = 40
-    mesh, bvh_dict = load_mesh('bunny.stl')
+    mesh, bvh_dict = load_mesh('suzanne.stl')
     print_bvh_summary(bvh_dict)
 
 
