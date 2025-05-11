@@ -130,6 +130,69 @@ def ray_triangle_intersection(ray: Ray, tri: Triangle, inter: ti.template(), tri
                     inter.shape_id = 2
 
 @ti.func
+def ray_aabb_intersection_test(ray, aabb_min, aabb_max, t_min, t_max):
+    t0 = t_min
+    t1 = t_max
+    hit = True
+
+    for i in ti.static(range(3)):
+        inv_d = 1.0 / ray.direction[i]
+        t_near = (aabb_min[i] - ray.origin[i]) * inv_d
+        t_far = (aabb_max[i] - ray.origin[i]) * inv_d
+
+        if inv_d < 0.0:
+            t_near, t_far = t_far, t_near
+
+        t0 = ti.max(t0, t_near)
+        t1 = ti.min(t1, t_far)
+
+        if t1 <= t0:
+            hit = False
+
+    return hit, t0
+
+@ti.func
+def ray_bvhs_intersection(ray: Ray, bvhs:ti.template(), bvh_infos:ti.template(), num_bvhs:ti.int32, triangles:ti.template(), inter:ti.template(), t_min: ti.f32, t_max: ti.f32): # type: ignore
+    
+    stack = ti.Vector([0 for _ in range(64)])  # fixed-size stack
+    for bvh_id in range(num_bvhs):
+        stack_ptr = 0
+        stack[0] = 0  # start from BVH root
+
+        while stack_ptr >= 0:
+            node_id = stack[stack_ptr]
+            stack_ptr -= 1
+
+            aabb_min = bvhs.aabb_min[bvh_id, node_id]
+            aabb_max = bvhs.aabb_max[bvh_id, node_id]
+
+            hit_aabb, t_aabb = ray_aabb_intersection_test(ray, aabb_min, aabb_max, t_min, inter.t)
+
+            if hit_aabb:
+                
+                # if inter.hit:
+                #     if t_aabb > inter.hit:
+                #         continue
+
+
+                if bvhs.is_leaf[bvh_id, node_id]:
+                    tri_start = bvhs.left_or_start[bvh_id, node_id]
+                    tri_count = bvhs.right_or_count[bvh_id, node_id]
+
+                    for i in range(tri_count):
+                        tri_id = bvh_infos[bvh_id].triangle_offset + tri_start + i
+                        tri = triangles[tri_id]
+                        ray_triangle_intersection(ray, tri, inter, tri_id, t_min, inter.t)
+                else:
+                    # push children in reverse order
+                    right = bvhs.right_or_count[bvh_id, node_id]
+                    left = bvhs.left_or_start[bvh_id, node_id]
+                    stack_ptr += 1
+                    stack[stack_ptr] = right
+                    stack_ptr += 1
+                    stack[stack_ptr] = left
+
+@ti.func
 def ray_scene_intersection(ray: Ray, scene: ti.template(), inter:ti.template(), t_min: ti.f32, t_max: ti.f32):  # type: ignore
     for i in range(scene.num_spheres[None]):
         ray_sphere_intersection(ray, scene.spheres[i], inter, i, t_min, t_max)
@@ -137,8 +200,12 @@ def ray_scene_intersection(ray: Ray, scene: ti.template(), inter:ti.template(), 
     for i in range(scene.num_planes[None]):
         ray_plane_intersection(ray, scene.planes[i], inter, i, t_min, t_max)
 
-    for i in range(scene.num_triangles[None]):
-        ray_triangle_intersection(ray, scene.triangles[i], inter, i, t_min, t_max)
+    for i in range(scene.num_free_triangles[None]):
+        triangle_id = scene.free_triangles[i]
+        ray_triangle_intersection(ray, scene.triangles[triangle_id], inter, i, t_min, t_max)
+
+    
+    ray_bvhs_intersection(ray, scene.bvhs, scene.bvh_infos, scene.num_bvhs[None], scene.triangles, inter, t_min, t_max)
 
 @ti.func
 def intersect_scene(ray: Ray, scene: ti.template(), t_min: ti.f32, t_max: ti.f32):  # type: ignore

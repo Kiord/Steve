@@ -12,8 +12,6 @@ class Material:
     emissive: vec3f # type: ignore
     shininess: ti.f32 # type: ignore
 
-
-
 @ti.dataclass
 class Sphere:
     center: vec3f # type: ignore
@@ -42,6 +40,73 @@ class PointLight:
     position: vec3f # type: ignore
     color: vec3f # type: ignore
 
+@ti.dataclass
+class BVHNode:
+    is_leaf: ti.i32 # type: ignore
+    left_or_start: ti.i32 # type: ignore
+    right_or_count: ti.i32 # type: ignore
+    aabb_min: vec3f # type: ignore
+    aabb_max: vec3f # type: ignore
+
+@ti.dataclass
+class BVHInfo:
+    triangle_offset: ti.i32 # type: ignore
+    num_nodes: ti.i32 # type: ignore
+
+#upload_free_triangles(self.free_triangles, free_tri_offset, Nt, triangle_ids)
+@ti.kernel
+def upload_free_triangles(
+    free_triangles: ti.template(),   # type: ignore
+    offset: ti.i32, count: ti.i32,  # type: ignore 
+    triangle_ids: ti.types.ndarray(), # type: ignore
+):
+    for i in range(count):
+        j = offset + i
+        free_triangles[j] = triangle_ids[i]
+
+@ti.kernel
+def upload_triangles(
+    triangles: ti.template(),   # type: ignore
+    offset: ti.i32, count: ti.i32,  # type: ignore 
+    v0: ti.types.ndarray(), # type: ignore
+    v1: ti.types.ndarray(), # type: ignore
+    v2: ti.types.ndarray(), # type: ignore
+    n: ti.types.ndarray(), # type: ignore
+    n0: ti.types.ndarray(), # type: ignore
+    n1: ti.types.ndarray(), # type: ignore
+    n2: ti.types.ndarray(), # type: ignore
+    material_id: ti.types.ndarray() # type: ignore
+):
+    for i in range(count):
+        j = offset + i
+        triangles.v0[j] = ti.Vector([v0[i, 0], v0[i, 1], v0[i, 2]], dt=ti.f32)
+        triangles.v1[j] = ti.Vector([v1[i, 0], v1[i, 1], v1[i, 2]], dt=ti.f32)
+        triangles.v2[j] = ti.Vector([v2[i, 0], v2[i, 1], v2[i, 2]], dt=ti.f32)
+        triangles.normal[j] = ti.Vector([n[i, 0], n[i, 1], n[i, 2]], dt=ti.f32)
+        triangles.n0[j] = ti.Vector([n0[i, 0], n0[i, 1], n0[i, 2]], dt=ti.f32)
+        triangles.n1[j] = ti.Vector([n1[i, 0], n1[i, 1], n1[i, 2]], dt=ti.f32)
+        triangles.n2[j] = ti.Vector([n2[i, 0], n2[i, 1], n2[i, 2]], dt=ti.f32)
+        triangles.material_id[j] = material_id[i]
+
+@ti.kernel
+def upload_bvh(
+    bvhs: ti.template(),   # type: ignore
+    bvh_id: ti.i32,  # type: ignore
+    node_count: ti.i32, # type: ignore
+    is_leaf: ti.types.ndarray(), # type: ignore
+    left_or_start: ti.types.ndarray(), # type: ignore
+    right_or_count: ti.types.ndarray(), # type: ignore
+    aabb_min: ti.types.ndarray(), # type: ignore
+    aabb_max: ti.types.ndarray(), # type: ignore
+):
+    for i in range(node_count):
+        bvhs.is_leaf[bvh_id, i] = is_leaf[i]
+        bvhs.left_or_start[bvh_id, i] = left_or_start[i]
+        bvhs.right_or_count[bvh_id, i] = right_or_count[i]
+        bvhs.aabb_min[bvh_id, i] = ti.Vector([aabb_min[i, 0], aabb_min[i, 1], aabb_min[i, 2]], dt=ti.f32)
+        bvhs.aabb_max[bvh_id, i] = ti.Vector([aabb_max[i, 0], aabb_max[i, 1], aabb_max[i, 2]], dt=ti.f32)
+
+
 class Scene:
     def __init__(self):
         # existing
@@ -49,12 +114,20 @@ class Scene:
         self.spheres = Sphere.field(shape=MAX_SPHERES)
         self.num_triangles = ti.field(dtype=ti.i32, shape=())
         self.triangles = Triangle.field(shape=MAX_TRIANGLES)
+        self.num_free_triangles = ti.field(dtype=ti.i32, shape=())
+        self.free_triangles = ti.field(dtype=ti.i32, shape=(MAX_TRIANGLES))
+
         self.num_planes = ti.field(dtype=ti.i32, shape=())
         self.planes = Plane.field(shape=MAX_PLANES)
         self.materials = Material.field(shape=MAX_MATERIALS)
         self.num_materials = ti.field(dtype=ti.i32, shape=())
         self.num_light_spheres = ti.field(dtype=ti.i32, shape=())
         self.light_spheres_id = ti.field(dtype=ti.i32, shape=MAX_SPHERES)
+
+        self.bvhs = BVHNode.field(shape=(MAX_BVHS, MAX_BVH_NODES))
+        self.bvh_infos = BVHInfo.field(shape=(MAX_BVHS))
+        self.num_bvhs = ti.field(dtype=ti.i32, shape=())
+        self.num_nodes = ti.field(dtype=ti.i32, shape=(MAX_BVH_NODES))
 
         self.ground_color = ti.Vector.field(3, dtype=ti.f32, shape=())
         self.horizon_color = ti.Vector.field(3, dtype=ti.f32, shape=())
@@ -129,6 +202,11 @@ class Scene:
             n1=ti.Vector(list(n1)),
             n2=ti.Vector(list(n2)),
             material_id=material_id)
+        
+        free_idx = self.num_free_triangles[None]
+        self.free_triangles[free_idx] = idx
+        self.num_free_triangles[None] += 1
+
         if self.materials[material_id].emissive.norm() > 0.0:
             print("[Warning] Triangle lights are not supported.")
         return idx
@@ -158,14 +236,78 @@ class Scene:
         return id1, id2
     
     def add_mesh(self, mesh:tm.Trimesh, material_id:int):
-        indices = []
-        for f in mesh.faces:
-            v0, v1, v2 = mesh.vertices[f]
-            n0, n1, n2 = mesh.vertex_normals[f]
-            idx = self.add_triangle(v0, v1, v2, material_id, n0, n1, n2)
-            indices.append(idx)
-        return indices
+        Nt = len(mesh.faces)
+        tri_offset = self.num_triangles[None]
+        free_tri_offset = self.num_free_triangles[None]
+ 
+        if tri_offset + Nt >= MAX_TRIANGLES:
+            print("[Scene] Not enough triangle slots!")
+            return -1
+        
+        self.num_triangles[None] += Nt
+        self.num_free_triangles[None] += Nt
 
+        v0 = np.ascontiguousarray(mesh.triangles[:, 0])
+        v1 = np.ascontiguousarray(mesh.triangles[:, 1])
+        v2 = np.ascontiguousarray(mesh.triangles[:, 2])
+        n = mesh.face_normals
+        face_vertex_normals = mesh.vertex_normals[mesh.faces]
+        n0 = np.ascontiguousarray(face_vertex_normals[:, 0])
+        n1 = np.ascontiguousarray(face_vertex_normals[:, 1])
+        n2 = np.ascontiguousarray(face_vertex_normals[:, 2])
+        mid = np.full((Nt,), material_id, dtype=np.int32)
+        triangle_ids = np.arange(tri_offset, tri_offset + Nt)
+
+        upload_triangles(self.triangles, tri_offset, Nt, v0, v1, v2, n, n0, n1, n2, mid)
+        upload_free_triangles(self.free_triangles, free_tri_offset, Nt, triangle_ids)
+
+
+    def add_mesh_bvh(self, mesh:tm.Trimesh, bvh_dict:dict, material_id:int):
+        bvh_id = self.num_bvhs[None]
+        Nt = len(mesh.faces)
+        tri_offset = self.num_triangles[None]
+
+        if self.num_bvhs[None] >= MAX_BVHS:
+            print("[Scene] Not enough BVH slots!")
+            return -1
+ 
+        if tri_offset + Nt >= MAX_TRIANGLES:
+            print("[Scene] Not enough triangle slots!")
+            return -1
+        
+   
+
+        is_leaf, left_or_start, right_or_count, aabb_min, aabb_max, depth, max_leaf_size, binned, torder = bvh_dict.values()
+        Nn = len(is_leaf)
+
+        if Nn > MAX_BVH_NODES:
+            print("[Scene] Not enough bvh node slots!")
+            return -1
+
+        self.num_bvhs[None] += 1
+        self.num_triangles[None] += Nt
+        self.num_nodes[bvh_id] += Nn
+
+        Nt = len(mesh.faces)
+        v0 = mesh.triangles[:, 0]
+        v1 = mesh.triangles[:, 1]
+        v2 = mesh.triangles[:, 2]
+        n = mesh.face_normals
+        face_vertex_normals = mesh.vertex_normals[mesh.faces]
+        n0 = face_vertex_normals[:, 0]
+        n1 = face_vertex_normals[:, 1]
+        n2 = face_vertex_normals[:, 2]
+        mid = np.full((Nt,), material_id, dtype=np.int32)
+
+        upload_triangles(self.triangles, tri_offset, Nt, v0[torder], v1[torder], v2[torder], n[torder], 
+                         n0[torder], n1[torder], n2[torder], mid[torder])
+
+
+        upload_bvh(self.bvhs, bvh_id, Nn, is_leaf, left_or_start, right_or_count, aabb_min, aabb_max)
+        self.bvh_infos.triangle_offset[bvh_id] = tri_offset
+        self.bvh_infos.num_nodes[bvh_id] = Nn
+
+        return bvh_id
 
 @ti.func
 def environment_color(view_dir: vec3f, scene:ti.template()) -> vec3f: # type: ignore

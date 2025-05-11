@@ -3,7 +3,7 @@ from datatypes import vec3f
 from scene import Material, Sphere
 import math
 from constants import EPS
-
+import bvh
 
 @ti.dataclass
 class DirectionSample:
@@ -325,3 +325,17 @@ def sample_sphere_hemisphere_cosine(viewer: vec3f, sphere: Sphere, sampler: Rand
     sls.pdf = ti.max(main_dir.dot(sls.normal), 0.0) / (math.pi * sphere.radius * sphere.radius)
 
     return sls
+
+
+def load_mesh(filename:str):
+    import trimesh as tm
+    import os
+    import numpy as np
+    mesh = tm.load_mesh(f'data/meshes/{filename}')
+    bvh_path = f'data/bvh/{filename}.npz'
+    if not os.path.exists(bvh_path):
+        bvh_dict = bvh.build_bvh(mesh.triangles)
+        np.savez(bvh_path, **bvh_dict)
+    else:
+        bvh_dict = np.load(bvh_path)
+    return mesh, bvh_dict

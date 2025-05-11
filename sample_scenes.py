@@ -6,6 +6,8 @@ import numpy as np
 import math
 import trimesh as tm
 import pyvista as pv
+from utils import load_mesh
+from bvh import print_bvh_summary
 
 def setup_veach_scene(scene:Scene, ffcc:FFCC):
     # Camera
@@ -66,14 +68,19 @@ def setup_suzanne_scene(scene:Scene, ffcc:FFCC):
     # ffcc.pos = np.array([0.0,-10.0, -40.0]) * scene_scale
     # ffcc.yaw = 90
     # ffcc.pitch = -math.degrees(0.1)
-    # ffcc.move_speed = 15 * scene_scale
+    
     # ffcc.fov = 40
+    mesh, bvh_dict = load_mesh('bunny.stl')
+    print_bvh_summary(bvh_dict)
 
-    mesh = tm.load_mesh('data/meshes/suzanne.stl')
+
+    ffcc.move_speed = mesh.scale
     # print(mesh)
     # plotter = pv.Plotter()
     # plotter.add_mesh(mesh)
     # plotter.add_arrows(mesh.vertices, mesh.vertex_normals, mag=0.1)
     # plotter.show()
     diffuse_white = scene.add_material([1,1,1],[0,0,0], 0)
-    scene.add_mesh(mesh, diffuse_white)
+
+    #scene.add_mesh(mesh, diffuse_white)
+    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white)
