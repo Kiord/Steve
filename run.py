@@ -1,9 +1,8 @@
 import click
 import taichi as ti
-import threading
 import dearpygui.dearpygui as dpg
 
-from scene import Scene, PointLight, Sphere, Material, Plane
+from scene import Scene
 from camera import Camera
 from path_tracing import render
 from denoising import bilateral_filter
@@ -30,8 +29,8 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
         print(f'[Error] unavailable backend "{arch}"')
 
     ti.init(arch=arch, default_fp=ti.f32, kernel_profiler=profiling)
-    import time
-    time.sleep(0.5)
+    #import time
+    #time.sleep(0.5)
 
     state = AppState(width=size[0], height=size[1])
     state.profiling = profiling
@@ -88,7 +87,11 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
     
         if state.tone_mapping:
             tone_map(final_buffer)
-       
+
+        # import numpy as np
+        # depth = np.clip(np.log(state.buffers.depth.to_numpy()), min=0)
+        # canvas.set_image(depth)
+
         canvas.set_image(final_buffer)
 
         window.show()
