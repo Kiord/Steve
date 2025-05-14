@@ -116,7 +116,11 @@ def ray_triangle_intersection(ray: Ray, tri: Triangle, inter: ti.template(), tri
     h = ray.direction.cross(edge2)
     a = edge1.dot(h)
 
-    if ti.abs(a) > EPS:
+    edge1_norm = edge1.norm()
+    h_norm = h.norm()
+    relative_eps = EPS * edge1_norm * h_norm + EPS  # small absolute epsilon to cover near-zero
+
+    if ti.abs(a) > relative_eps:
         f = 1.0 / a
         s = ray.origin - tri.v0
         u = f * s.dot(h)
@@ -125,7 +129,7 @@ def ray_triangle_intersection(ray: Ray, tri: Triangle, inter: ti.template(), tri
             q = s.cross(edge1)
             v = f * ray.direction.dot(q)
             
-            if 0.0 <= v <= 1.0 and u + v <= 1.0:
+            if 0.0 <= v <= 1.0 and u + v <= 1.0 + relative_eps:
                 t = f * edge2.dot(q)
                 t_max_ = ti.min(inter.t, t_max)
 
