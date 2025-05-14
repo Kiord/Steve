@@ -1,6 +1,7 @@
 import click
 import taichi as ti
 import dearpygui.dearpygui as dpg
+import numpy as np
 
 from scene import Scene
 from camera import Camera
@@ -71,33 +72,34 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
             ti.profiler.clear_kernel_profiler_info()
 
         render(scene, camera, spp=state.spp,
-               max_depth=state.max_depth,
+               max_depth=1 if state.mode_id != 0 else state.max_depth,
                buffers=state.buffers,
                width=state.width, height=state.height,
                frame_id=state.frame_id)
 
-        final_buffer = state.buffers.final_buffer
-
-        if state.denoising:
-            bilateral_filter(state.buffers,
-                             sigma_color=state.sigma_color,
-                             sigma_normal=state.sigma_normal,
-                             sigma_spatial=state.sigma_spatial,
-                             radius=state.radius)
-            final_buffer = state.buffers.denoised
-    
-        if state.tone_mapping:
-            tone_map(final_buffer)
-
-        import numpy as np
-
-
-
+        if state.mode_id == 0:
+            final_buffer = state.buffers.final_buffer
+            if state.denoising:
+                bilateral_filter(state.buffers,
+                                sigma_color=state.sigma_color,
+                                sigma_normal=state.sigma_normal,
+                                sigma_spatial=state.sigma_spatial,
+                                radius=state.radius)
+                final_buffer = state.buffers.denoised
+            if state.tone_mapping:
+                tone_map(final_buffer)
+        elif state.mode_id == 1:
+            final_buffer = state.buffers.albedo
+        elif state.mode_id == 2:
+            final_buffer = state.buffers.normal.to_numpy() * 0.5 + 0.5
+        elif state.mode_id == 3:
+            final_buffer = np.clip(np.log(0.2*np.clip(state.buffers.bvh_depth.to_numpy(), min=1)), min=0)
+        elif state.mode_id == 4:
+            final_buffer = np.clip(np.log(state.buffers.depth.to_numpy()), min=0)
+        elif state.mode_id == 5:
+            final_buffer = np.clip(np.log(0.05*np.clip(state.buffers.box_test_count.to_numpy(), min=1)), min=0)
+      
         canvas.set_image(final_buffer)
-
-        box_test_count = state.buffers.box_test_count.to_numpy()
-        box_test_count /= max(box_test_count.max(), 1e-6)
-        canvas.set_image(box_test_count)
 
         window.show()
 

@@ -48,7 +48,7 @@ class FreeFlyCameraController:
     def update_from_input(self, gui :ti.ui.Window, dt):
         forward, right, _ = self.get_view_dirs()
 
-        for key in ["w", "s", "d", "a", " ", "Control", "Left", "Right", "Up", "Down"]:
+        for key in ["w", "s", "d", "a", " ", "Control", "Left", "Right", "Up", "Down", "g"]:
             if gui.is_pressed(key):
                 self.app_state.frame_id = 0
 
@@ -73,6 +73,11 @@ class FreeFlyCameraController:
             self.pitch = min(self.pitch + self.turn_speed * dt, 89.0)
         if gui.is_pressed("Down"):  # Pitch down
             self.pitch = max(self.pitch - self.turn_speed * dt, -89.0)
+        
+        if gui.is_pressed("g"):
+            self.app_state.mode_id = (self.app_state.mode_id + 1) % len(AppState.modes)
+            print(f'Mode : {AppState.modes[self.app_state.mode_id]}')
+        
 
     def update_camera_field(self, camera_field):
         forward, _, up = self.get_view_dirs()
