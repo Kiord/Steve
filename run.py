@@ -89,11 +89,15 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
         if state.tone_mapping:
             tone_map(final_buffer)
 
-        # import numpy as np
-        # depth = np.clip(np.log(state.buffers.depth.to_numpy()), min=0)
-        # canvas.set_image(depth)
+        import numpy as np
+
+
 
         canvas.set_image(final_buffer)
+
+        box_test_count = state.buffers.box_test_count.to_numpy()
+        box_test_count /= max(box_test_count.max(), 1e-6)
+        canvas.set_image(box_test_count)
 
         window.show()
 

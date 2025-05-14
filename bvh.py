@@ -3,6 +3,7 @@ from numba import njit, int32, float32
 from collections import defaultdict
 from numba.typed import List
 from time import time
+from constants import EPS
 
 @njit
 def surface_area(bmin, bmax):
@@ -437,19 +438,119 @@ def _build_binary_binned_sah_bvh(triangles, max_leaf_size=4, num_bins=16):
         output_triangles_order
     )
 
-def build_bvh(triangles, max_leaf_size=4, binned=True):
+@njit(cache=True)
+def _build_binary_median_bvh(triangles, max_leaf_size=4, num_bins=16):
+    tri_centroids, tri_aabb_min, tri_aabb_max = _prepare_triangle_data(triangles)
+
+    N = len(tri_centroids)
+    max_nodes = 2 * N
+    is_leaf = np.zeros(max_nodes, dtype=int32)
+    left_child = np.full(max_nodes, -1, dtype=int32)
+    right_child = np.full(max_nodes, -1, dtype=int32)
+    depth = np.full(max_nodes, -1, dtype=int32)
+
+    aabb_min = np.full((max_nodes, 3), np.inf, dtype=float32)
+    aabb_max = np.full((max_nodes, 3), -np.inf, dtype=float32)
+
+    output_triangles_order = np.empty(N, dtype=int32)
+    reorder_ptr = 0
+    stack = [(0, np.arange(N, dtype=int32), 0)]
+    node_ptr = 1
+
+    def compute_surface_area(min_corner, max_corner):
+        d = max_corner - min_corner
+        return 2.0 * (d[0]*d[1] + d[1]*d[2] + d[2]*d[0])
+
+    def compute_bounds(indices):
+        bmin = tri_aabb_min[indices[0]].copy()
+        bmax = tri_aabb_max[indices[0]].copy()
+        for i in range(1, len(indices)):
+            idx = indices[i]
+            for k in range(3):
+                bmin[k] = min(bmin[k], tri_aabb_min[idx][k])
+                bmax[k] = max(bmax[k], tri_aabb_max[idx][k])
+        return bmin, bmax
+
+    while len(stack) > 0:
+        node_id, node_indices, node_depth = stack.pop()
+        depth[node_id] = node_depth
+        count = len(node_indices)
+
+        bmin, bmax = compute_bounds(node_indices)
+        aabb_min[node_id] = bmin
+        aabb_max[node_id] = bmax
+
+        if count <= max_leaf_size:
+            is_leaf[node_id] = 1
+            left_child[node_id] = reorder_ptr
+            right_child[node_id] = count
+            for i in range(count):
+                output_triangles_order[reorder_ptr] = node_indices[i]
+                reorder_ptr += 1
+        else:
+
+            best_cost = np.inf
+
+            right_ids = None
+            left_ids = None
+
+            for axis in range(3):
+                centroids_axis = np.empty(len(node_indices), dtype=tri_centroids.dtype)
+                for i in range(len(node_indices)):
+                    centroids_axis[i] = tri_centroids[node_indices[i], axis]
+
+                tri_order = np.argsort(centroids_axis)
+                right_candidates = node_indices[tri_order[:count//2]]
+                right_min_bounds, right_max_bounds = compute_bounds(right_candidates)
+                left_candidates = node_indices[tri_order[count//2:]]
+                left_min_bounds, left_max_bounds = compute_bounds(left_candidates)
+                
+                right_area = compute_surface_area(right_min_bounds, right_max_bounds)
+                left_area = compute_surface_area(left_min_bounds, left_max_bounds)
+                cost = left_area + right_area
+                if cost < best_cost:
+                    best_cost = cost
+                    right_ids = right_candidates
+                    left_ids = left_candidates
+
+            left_id = node_ptr
+            node_ptr += 1
+            right_id = node_ptr
+            node_ptr += 1
+
+            left_child[node_id] = left_id
+            right_child[node_id] = right_id
+
+            stack.append((right_id, right_ids, node_depth + 1))
+            stack.append((left_id, left_ids, node_depth + 1))
+
+    return (
+        is_leaf[:node_ptr],
+        left_child[:node_ptr],
+        right_child[:node_ptr],
+        aabb_min[:node_ptr],
+        aabb_max[:node_ptr],
+        depth[:node_ptr],
+        output_triangles_order
+    )
+
+def build_bvh(triangles, max_leaf_size=4, bvh_type='binned'):
 
     bt = time()
-    if binned:
+    if bvh_type == 'binned':
         bvh_tuple = _build_binary_binned_sah_bvh(triangles, max_leaf_size)
-    else:
+    elif bvh_type == 'sweep':
         bvh_tuple =  _build_binary_sah_bvh(triangles, max_leaf_size)
-
+    elif bvh_type == 'median':
+        bvh_tuple =  _build_binary_median_bvh(triangles, max_leaf_size)
+    else:
+        raise ValueError(f"Wrong bvh_type ({bvh_type})")
     is_leaf, left_child, right_child, aabb_min, aabb_max, depth, output_triangles_order = bvh_tuple
+
     bvh_dict = dict(
         is_leaf=is_leaf, left_child=left_child, right_child=right_child, 
         aabb_min=aabb_min, aabb_max=aabb_max, depth=depth, 
-        max_leaf_size=max_leaf_size, binned=binned,
+        max_leaf_size=max_leaf_size, bvh_type=bvh_type,
         output_triangles_order=output_triangles_order
     )
     print(time() - bt)
@@ -464,7 +565,7 @@ def print_bvh_summary(bvh_dict):
     - Internal node area ratio stats
     - Leaf triangle count mean/std/min/max
     """
-    is_leaf, left_child, right_child, aabb_min, aabb_max, depth, max_leaf_size, binned, output_triangles_order = bvh_dict.values()
+    is_leaf, left_child, right_child, aabb_min, aabb_max, depth, max_leaf_size, type, output_triangles_order = bvh_dict.values()
     num_nodes = len(is_leaf)
 
     def compute_surface_area(min_corner, max_corner):
@@ -523,7 +624,7 @@ def print_bvh_summary(bvh_dict):
         print(f"  Minimum: {np.min(leaf_triangle_counts)}")
         print(f"  Maximum: {np.max(leaf_triangle_counts)}")
 
-    print(f"Binned ?: {binned}")
+    print(f"type : {type}")
     print(f"Max leaf size : {max_leaf_size}")
 
 def aabbs_to_mesh(aabb_min, aabb_max):
@@ -573,9 +674,9 @@ if __name__ == '__main__':
     from time import time
     mesh = tm.load_mesh('data/meshes/bunny.stl')
     print(mesh)
-    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4)
-    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4)
-    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4)
+    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4, bvh_type='median')
+    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4, bvh_type='median')
+    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4, bvh_type='median')
     is_leaf, left_child, right_child, aabb_min, aabb_max, depth, max_leaf_size, binned, output_triangles_order = bvh_dict.values()
     
     print_bvh_summary(bvh_dict)

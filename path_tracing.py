@@ -15,6 +15,7 @@ class RenderBuffers:
         self.albedo = ti.Vector.field(3, ti.f32, shape=(width, height))
         self.normal = ti.Vector.field(3, ti.f32, shape=(width, height))
         self.bvh_depth = ti.field(ti.f32, shape=(width, height))
+        self.box_test_count = ti.field(ti.f32, shape=(width, height))
         self.depth = ti.field(ti.f32, shape=(width, height))
         self.denoised = ti.Vector.field(3, ti.f32, shape=(width, height))
         self.accum_color = ti.Vector.field(3, ti.f32, shape=(width, height))
@@ -126,9 +127,13 @@ def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSa
     aux_normal = ti.Vector([0.0, 0.0, 0.0])
     aux_depth = MAX_DIST
     aux_bvh_depth = 0
+    aux_box_test_count = 0
 
     for bounce in range(max_depth):
         inter = intersect_scene(ray, scene, 0, MAX_DIST)
+
+        if bounce == 0:
+            aux_box_test_count = inter.box_test_count
 
         if not inter.hit:
             env_color = environment_color(ray.direction, scene)
@@ -182,7 +187,7 @@ def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSa
             aux_depth = inter.t
             aux_bvh_depth = inter.bvh_depth
 
-    return result, aux_albedo, aux_normal, aux_depth, aux_bvh_depth
+    return result, aux_albedo, aux_normal, aux_depth, aux_bvh_depth, aux_box_test_count
 
 
 
@@ -195,6 +200,7 @@ def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, max_depth: 
         buffers.normal[i, j] = ti.Vector([0.0, 0.0, 0.0])
         buffers.depth[i, j] = 0.0
         buffers.bvh_depth[i, j] = 0.0
+        buffers.box_test_count[i, j] = 0.0
         if frame_id == 0:
             buffers.accum_color[i, j] = ti.Vector([0.0, 0.0, 0.0])
         sampler = RandomSampler(i, j, frame_id, 0)
@@ -204,17 +210,19 @@ def render(scene: ti.template(), camera: ti.template(), spp: ti.i32, max_depth: 
             v = (j + sampler.next()) / height
 
             ray = make_ray(camera[None], u, v)
-            color, aux_albedo, aux_normal, aux_depth, aux_bvh_depth = path_trace(scene, ray, max_depth, sampler)
+            color, aux_albedo, aux_normal, aux_depth, aux_bvh_depth, aux_box_test_count = path_trace(scene, ray, max_depth, sampler)
             buffers.color[i, j] += color
             buffers.albedo[i, j] += aux_albedo
             buffers.normal[i, j] += aux_normal
             buffers.depth[i, j] += aux_depth
             buffers.bvh_depth[i, j] += aux_bvh_depth
+            buffers.box_test_count[i, j] += aux_box_test_count
         buffers.color[i, j] /= spp
         buffers.albedo[i, j] /= spp
         buffers.normal[i, j] /= spp
         buffers.depth[i, j] /= spp
         buffers.bvh_depth[i, j] /= spp
+        buffers.box_test_count[i, j] /= spp
         t1 = 1.0/ (frame_id+1)
         t2 = 1 - t1
         buffers.accum_color[i, j] = buffers.accum_color[i, j] * t2 + buffers.color[i, j] * t1

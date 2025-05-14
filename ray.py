@@ -23,6 +23,7 @@ class Intersection:
     shape_id : ti.i32 # type:ignore  0 sphere, 1 plane, 2 tri 
     ray: Ray
     bvh_depth : ti.int32 # type:ignore
+    box_test_count: ti.int32 # type:ignore
 
 @ti.func
 def transform_point(p_local, transform: mat4f ): # type: ignore
@@ -55,7 +56,8 @@ def empty_intersection(ray:Ray) -> Intersection:
         triangle_id=-1,
         shape_id=-1,
         ray=ray,
-        bvh_depth=0
+        bvh_depth=0,
+        box_test_count=0,
     )               
 
 @ti.func
@@ -118,9 +120,9 @@ def ray_triangle_intersection(ray: Ray, tri: Triangle, inter: ti.template(), tri
 
     edge1_norm = edge1.norm()
     h_norm = h.norm()
-    relative_eps = EPS * edge1_norm * h_norm + EPS  # small absolute epsilon to cover near-zero
+    relative_eps  = EPS * edge1_norm * h_norm + EPS  # small absolute epsilon to cover near-zero
 
-    if ti.abs(a) > relative_eps:
+    if ti.abs(a) > relative_eps :
         f = 1.0 / a
         s = ray.origin - tri.v0
         u = f * s.dot(h)
@@ -129,7 +131,7 @@ def ray_triangle_intersection(ray: Ray, tri: Triangle, inter: ti.template(), tri
             q = s.cross(edge1)
             v = f * ray.direction.dot(q)
             
-            if 0.0 <= v <= 1.0 and u + v <= 1.0 + relative_eps:
+            if 0.0 <= v <= 1.0 and u + v <= 1.0 + relative_eps :
                 t = f * edge2.dot(q)
                 t_max_ = ti.min(inter.t, t_max)
 
@@ -151,17 +153,25 @@ def ray_triangle_intersection(ray: Ray, tri: Triangle, inter: ti.template(), tri
                     inter.shape_id = 2
                     inter.bvh_depth = bvh_depth
 
+@ti.func
+def inflate_aabb(aabb_min, aabb_max, value):
+    aabb_centroid = 0.5 * aabb_min + 0.5 * aabb_max
+    direction = (aabb_max - aabb_centroid).normalized()
+    aabb_max = aabb_max + value * direction
+    aabb_min = aabb_min - value * direction
+    return aabb_min, aabb_max
 
 @ti.func
 def ray_aabb_intersection_test(ray, aabb_min, aabb_max, t_min, t_max):
+    
     t0 = t_min
     t1 = t_max
     hit = True
 
     for i in ti.static(range(3)):
         inv_d = 1.0 / ray.direction[i]
-        t_near = (aabb_min[i] - ray.origin[i]) * inv_d - EPS
-        t_far = (aabb_max[i] - ray.origin[i]) * inv_d + EPS
+        t_near = (aabb_min[i] - ray.origin[i]) * inv_d
+        t_far = (aabb_max[i] - ray.origin[i]) * inv_d
 
         if inv_d < 0.0:
             t_near, t_far = t_far, t_near
@@ -169,8 +179,9 @@ def ray_aabb_intersection_test(ray, aabb_min, aabb_max, t_min, t_max):
         t0 = ti.max(t0, t_near)
         t1 = ti.min(t1, t_far)
 
-        if t1 <= t0:
+        if t1 < t0:
             hit = False
+
     if not hit:
         t0 = MAX_DIST
     return hit, t0
@@ -228,8 +239,11 @@ def ray_bvhs_intersection(ray: Ray, bvhs:ti.template(), bvh_infos:ti.template(),
                 aabb_max_left = bvhs.aabb_max[bvh_id, left_id]
                 hit_aabb_left, t_aabb_left = ray_aabb_intersection_test(ray_local, aabb_min_left, aabb_max_left, t_min, inter_local.t)
 
-                if ((hit_aabb_right and inter_local.t > t_aabb_right) and
-                     (hit_aabb_left and inter_local.t > t_aabb_left)):
+                inter.box_test_count += 2
+
+                should_push_left = hit_aabb_left and inter_local.t > t_aabb_left
+                should_push_right = hit_aabb_right and inter_local.t > t_aabb_right
+                if should_push_left and should_push_right:
                     right_closer = t_aabb_right < t_aabb_left
                     first = ti.select(right_closer, right_id, left_id)
                     second = ti.select(right_closer, left_id, right_id)
@@ -237,10 +251,10 @@ def ray_bvhs_intersection(ray: Ray, bvhs:ti.template(), bvh_infos:ti.template(),
                     stack[stack_ptr] = second
                     stack_ptr += 1
                     stack[stack_ptr] = first
-                elif hit_aabb_right and inter_local.t > t_aabb_right:
+                elif should_push_right:
                     stack_ptr += 1
                     stack[stack_ptr] = right_id
-                elif hit_aabb_left and inter_local.t > t_aabb_left:
+                elif should_push_left:
                     stack_ptr += 1
                     stack[stack_ptr] = left_id
         
@@ -262,7 +276,6 @@ def ray_bvhs_intersection(ray: Ray, bvhs:ti.template(), bvh_infos:ti.template(),
             inter.triangle_id = inter_local.triangle_id
             inter.shape_id = 2
             inter.bvh_depth = inter_local.bvh_depth
-            
 
 @ti.func
 def ray_scene_intersection(ray: Ray, scene: ti.template(), inter:ti.template(), t_min: ti.f32, t_max: ti.f32):  # type: ignore

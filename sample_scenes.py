@@ -115,7 +115,7 @@ def setup_dragon_scene(scene:Scene, ffcc:FFCC):
     # ffcc.pitch = -math.degrees(0.1)
     
     # ffcc.fov = 40
-    mesh, bvh_dict = load_mesh('bunny.stl')
+    mesh, bvh_dict = load_mesh('suzanne.stl', bvh_type='sweep', recompute_bvh=True)
     print_bvh_summary(bvh_dict)
     s = 1.0 / mesh.scale
 
@@ -131,9 +131,9 @@ def setup_dragon_scene(scene:Scene, ffcc:FFCC):
 
     
     t = np.array([
-        [s, 0, 0, 0],
         [0, s, 0, 0],
         [0, 0, s, 0],
+        [s, 0, 0, 0],
         [0, 0, 0, 1],
     ], dtype=np.float32)
     scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white, t)

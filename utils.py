@@ -326,14 +326,14 @@ def sample_sphere_hemisphere_cosine(viewer: vec3f, sphere: Sphere, sampler: Rand
 
     return sls
 
-def load_mesh(filename:str):
+def load_mesh(filename:str, max_leaf_size=4, bvh_type='binned', recompute_bvh=False):
     import trimesh as tm
     import os
     import numpy as np
     mesh = tm.load_mesh(f'data/meshes/{filename}')
     bvh_path = f'data/bvh/{filename}.npz'
-    if not os.path.exists(bvh_path):
-        bvh_dict = bvh.build_bvh(mesh.triangles)
+    if not os.path.exists(bvh_path) or recompute_bvh:
+        bvh_dict = bvh.build_bvh(mesh.triangles, max_leaf_size=max_leaf_size, bvh_type=bvh_type)
         np.savez(bvh_path, **bvh_dict)
     else:
         bvh_dict = np.load(bvh_path)
