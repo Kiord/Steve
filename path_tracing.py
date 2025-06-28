@@ -4,10 +4,16 @@ import math
 from datatypes import vec3f
 from scene import Material, environment_color
 from camera import make_ray
-from utils import (Contribution, RandomSampler, sample_BSDF, sample_sphere_solid_angle, BSDF, PDF, PDF_solid_angle_sphere,
+# from utils import (Contribution, RandomSampler, sample_BSDF, sample_sphere_solid_angle, BSDF, PDF, PDF_solid_angle_sphere,
+#                    sample_sphere_uniform, sample_sphere_hemisphere_cosine, sample_sphere_hemisphere_uniform, SurfaceLightSample
+#                     )
+from utils import (Contribution, RandomSampler, sample_sphere_solid_angle, PDF_solid_angle_sphere, LightSample,
                    sample_sphere_uniform, sample_sphere_hemisphere_cosine, sample_sphere_hemisphere_uniform, SurfaceLightSample
                     )
-from constants import EPS, MAX_DIST
+from constants import *
+from bsdf import bsdf_sample, bsdf_eval, bsdf_pdf
+from emitters import emitter_sample
+
 
 class RenderBuffers:
     def __init__(self, width:int, height:int):
@@ -26,7 +32,8 @@ class RenderBuffers:
 def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> Contribution:  # type: ignore
     contrib= Contribution(vec3f(0.0, 0.0, 0.0), 0.0)
     mat = scene.materials[inter.material_id]
-    ds = sample_BSDF(inter.normal, mat, inter.ray.direction, sampler)
+    #ds = sample_BSDF(inter.normal, mat, inter.ray.direction, sampler)
+    ds = bsdf_sample(mat, inter.normal, inter.ray.direction, sampler)
     pdf_light = 0.0
     if ds.pdf > EPS:
         ray = Ray(inter.point + inter.normal * EPS, ds.direction)
@@ -46,58 +53,82 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
     return contrib, pdf_light
 
 
-@ti.func
-def sample_light_contrib(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> Contribution:  # type: ignore
+# @ti.func
+# def sample_light_contrib_(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> Contribution:  # type: ignore
     
-    u = sampler.next()
-    light_sphere_id = min(int(u * scene.num_light_spheres[None]), scene.num_light_spheres[None]-1)
-    sphere_id = scene.light_spheres_id[light_sphere_id]
-    light_sphere = scene.spheres[sphere_id]
-    emissive_mat = scene.materials[light_sphere.material_id]
-    light_color = emissive_mat.emissive
-    inter_mat = scene.materials[inter.material_id]
+#     u = sampler.next()
+#     light_sphere_id = min(int(u * scene.num_light_spheres[None]), scene.num_light_spheres[None]-1)
+#     sphere_id = scene.light_spheres_id[light_sphere_id]
+#     light_sphere = scene.spheres[sphere_id]
+#     emissive_mat = scene.materials[light_sphere.material_id]
+#     light_color = emissive_mat.emissive
+#     inter_mat = scene.materials[inter.material_id]
 
-    use_area_based_sampling = False
+#     use_area_based_sampling = False
 
-    sls = SurfaceLightSample()
-    if use_area_based_sampling:
-        #sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
-        #sls = sample_sphere_hemisphere_uniform(inter.point, light_sphere, sampler)
-        sls = sample_sphere_hemisphere_cosine(inter.point, light_sphere, sampler)
-    else:
-        sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
+#     sls = SurfaceLightSample()
+#     if use_area_based_sampling:
+#         #sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
+#         #sls = sample_sphere_hemisphere_uniform(inter.point, light_sphere, sampler)
+#         sls = sample_sphere_hemisphere_cosine(inter.point, light_sphere, sampler)
+#     else:
+#         sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
    
 
 
     
-    pdf = sls.pdf / scene.num_light_spheres[None]
+#     pdf = sls.pdf / scene.num_light_spheres[None]
 
-    point_to_sample = sls.point - inter.point
-    dist = point_to_sample.norm()
-    point_to_sample /= dist
+#     point_to_sample = sls.point - inter.point
+#     dist = point_to_sample.norm()
+#     point_to_sample /= dist
 
-    if use_area_based_sampling:
-        # Remap pdf to area pdf
-        cosl = sls.normal.dot(-point_to_sample)
-        SA_to_area = cosl/(dist*dist);
-        pdf /= SA_to_area;
+#     if use_area_based_sampling:
+#         # Remap pdf to area pdf
+#         cosl = sls.normal.dot(-point_to_sample)
+#         SA_to_area = cosl/(dist*dist);
+#         pdf /= SA_to_area;
 
-    bsdf = BSDF(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
+#     bsdf = bsdf_eval(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
 
-    pdf_surface = PDF(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
+#     pdf_surface = bsdf_pdf(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
 
-    cosi = abs(inter.normal.dot(point_to_sample))
-    prod = bsdf * cosi
-    value = vec3f(0.0)
+#     cosi = abs(inter.normal.dot(point_to_sample))
+#     prod = bsdf * cosi
+#     value = vec3f(0.0)
 
-    if prod.norm() > 0.0:
-        # ray_light = Ray(inter.point, point_to_sample)
-        # inter_light = intersect_scene(ray_light, scene, EPS, dist-EPS)
-        # v = float(inter_light.hit == 0 or (inter_light.point - sls.point).norm() < 1e-4) 
-        v = visibility(scene, inter.point + EPS * inter.normal, sls.point)
-        value = v * light_color  * prod / pdf
+#     if prod.norm() > 0.0:
+#         # ray_light = Ray(inter.point, point_to_sample)
+#         # inter_light = intersect_scene(ray_light, scene, EPS, dist-EPS)
+#         # v = float(inter_light.hit == 0 or (inter_light.point - sls.point).norm() < 1e-4) 
+#         v = visibility(scene, inter.point + EPS * inter.normal, sls.point)
+#         value = v * light_color  * prod / pdf
 
-    return Contribution(value, pdf), pdf_surface
+#     return Contribution(value, pdf), pdf_surface
+
+@ti.func
+def sample_light_contrib(scene: ti.template(), inter: Intersection, sampler: RandomSampler):
+    total_lights = scene.num_light_spheres[None] + scene.num_light_triangles[None]
+    ls = LightSample(direction=vec3f(0.0), contrib=vec3f(0.0), pdf=0.0)
+
+    if total_lights > 0:
+        u = sampler.next()
+        light_index = int(u * total_lights)
+
+        emitter_type = EMITTER_SPHERE
+        if light_index >= scene.num_light_spheres[None]:
+            emitter_type = EMITTER_TRIANGLE
+
+        ls = emitter_sample(emitter_type, scene, inter, sampler)
+
+    # Compute PDF_surface (for BSDF MIS)
+    wi = -inter.ray.direction
+    wo = ls.direction
+    mat = scene.materials[inter.material_id]
+    pdf_surface = bsdf_pdf(mat, inter.normal, wi, wo)
+
+    return Contribution(ls.contrib, ls.pdf), pdf_surface
+
 
 @ti.func
 def balance_heuristic(pdf_a: ti.f32, pdf_b: ti.f32) -> ti.f32:# type: ignore
@@ -167,7 +198,9 @@ def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSa
         #     throughput /= p
         #     pdf_total *= p
 
-        ds = sample_BSDF(inter.normal, mat, ray.direction, sampler)
+        #ds = sample_BSDF(inter.normal, mat, ray.direction, sampler)
+        ds = bsdf_sample(mat, inter.normal, ray.direction, sampler)
+
         if ds.pdf < EPS:
             #result = ti.Vector([1000.,0,0])
             break

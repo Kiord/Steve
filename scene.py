@@ -11,6 +11,7 @@ class Material:
     albedo: vec3f # type: ignore
     emissive: vec3f # type: ignore
     shininess: ti.f32 # type: ignore
+    bsdf_type: ti.i32 # type: ignore
 
 @ti.dataclass
 class Sphere:
@@ -129,6 +130,9 @@ class Scene:
         self.num_light_spheres = ti.field(dtype=ti.i32, shape=())
         self.light_spheres_id = ti.field(dtype=ti.i32, shape=MAX_SPHERES)
 
+        self.num_light_triangles = ti.field(dtype=ti.i32, shape=())
+        self.light_triangles_id = ti.field(dtype=ti.i32, shape=MAX_TRIANGLES)
+
         self.bvhs = BVHNode.field(shape=(MAX_BVHS, MAX_BVH_NODES))
         self.bvh_infos = BVHInfo.field(shape=(MAX_BVHS))
         self.num_bvhs = ti.field(dtype=ti.i32, shape=())
@@ -153,9 +157,11 @@ class Scene:
     def add_material(self, albedo, emissive, shininess):
         material_id = self.num_materials[None]
         self.num_materials[None] += 1
+        bsdf_type = BSDF_PHONG if shininess > EPS else BSDF_LAMBERT
         self.materials[material_id] =  Material(albedo=ti.Vector(list(albedo)), 
                                                 emissive=ti.Vector(list(emissive)), 
-                                                shininess=shininess)
+                                                shininess=shininess,
+                                                bsdf_type=bsdf_type)
         return material_id
 
     def add_sphere(self, center:np.ndarray, radius:float, material_id:int):
@@ -213,7 +219,9 @@ class Scene:
         self.num_free_triangles[None] += 1
 
         if self.materials[material_id].emissive.norm() > 0.0:
-            print("[Warning] Triangle lights are not supported.")
+            light_idx = self.num_light_triangles[None]
+            self.light_triangles_id[light_idx] = idx
+            self.num_light_triangles[None] += 1
         return idx
 
     def add_quad(self, position, scale, axis, angle, material_id):

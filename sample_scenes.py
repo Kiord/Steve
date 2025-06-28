@@ -50,10 +50,10 @@ def setup_veach_scene(scene:Scene, ffcc:FFCC):
         material_id = scene.add_material([1,1,1], [0,0,0], multiplier * shininesses[i])
         scene.add_quad(offset + shifts[i], scale, [1,0,0], -angles[i], material_id)
 
-    # scene.ground_color[None] =  ti.Vector([0,0,0])
-    # scene.horizon_color[None] = ti.Vector([0,0,0])
-    # scene.sky_color[None] = ti.Vector([0,0,0])
-    # scene.sun_color[None] = ti.Vector([0,0,0])
+    scene.ground_color[None] =  ti.Vector([0,0,0])
+    scene.horizon_color[None] = ti.Vector([0,0,0])
+    scene.sky_color[None] = ti.Vector([0,0,0])
+    scene.sun_color[None] = ti.Vector([0,0,0])
 
     # mat2 = scene.add_material([0.0,0.0,.0], [20.0,0,0], 0) 
 
@@ -115,7 +115,7 @@ def setup_dragon_scene(scene:Scene, ffcc:FFCC):
     # ffcc.pitch = -math.degrees(0.1)
     
     # ffcc.fov = 40
-    mesh, bvh_dict = load_mesh('bunny.stl', bvh_type='sweep', recompute_bvh=True)
+    mesh, bvh_dict = load_mesh('sponza.stl', bvh_type='sweep')
     print_bvh_summary(bvh_dict)
     s = 1.0 / mesh.scale
 

@@ -45,15 +45,14 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
     #setup_scene(scene)
 
     
-
     camera = Camera.field(shape=())
     camera_controller = FreeFlyCameraController(state)
     camera_controller.update_camera_field(camera)
 
 
-    #setup_veach_scene(scene, camera_controller)
+    setup_veach_scene(scene, camera_controller)
     #setup_suzanne_scene(scene, camera_controller)
-    setup_dragon_scene(scene, camera_controller)
+    #setup_dragon_scene(scene, camera_controller)
     #setup_scene(scene)
     #build_ui(state)
     #threading.Thread(target=dpg.start_dearpygui, daemon=True).start()
