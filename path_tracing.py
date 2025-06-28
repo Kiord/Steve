@@ -1,17 +1,11 @@
 import taichi as ti
-from ray import intersect_scene, Ray, Intersection, visibility
-import math
+from ray import intersect_scene, Ray, Intersection
 from datatypes import vec3f
-from scene import Material, environment_color
+from scene import  environment_color
 from camera import make_ray
-# from utils import (Contribution, RandomSampler, sample_BSDF, sample_sphere_solid_angle, BSDF, PDF, PDF_solid_angle_sphere,
-#                    sample_sphere_uniform, sample_sphere_hemisphere_cosine, sample_sphere_hemisphere_uniform, SurfaceLightSample
-#                     )
-from utils import (Contribution, RandomSampler, sample_sphere_solid_angle, PDF_solid_angle_sphere, LightSample,
-                   sample_sphere_uniform, sample_sphere_hemisphere_cosine, sample_sphere_hemisphere_uniform, SurfaceLightSample
-                    )
+from utils import (Contribution, RandomSampler,  pdf_solid_angle_sphere, LightSample)
 from constants import *
-from bsdf import bsdf_sample, bsdf_eval, bsdf_pdf
+from bsdf import bsdf_sample, bsdf_pdf
 from emitters import emitter_sample
 
 
@@ -43,7 +37,7 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
             
             light_sphere = scene.spheres[inter_check.sphere_id]
 
-            pdf_light = PDF_solid_angle_sphere(light_sphere, inter.point) / scene.num_light_spheres[None]
+            pdf_light = pdf_solid_angle_sphere(light_sphere, inter.point) / scene.num_light_spheres[None]
 
             cos_theta = inter.normal.dot(ds.direction)
             if cos_theta > 0.0:
@@ -51,60 +45,6 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
                 contrib.pdf = ds.pdf
 
     return contrib, pdf_light
-
-
-# @ti.func
-# def sample_light_contrib_(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> Contribution:  # type: ignore
-    
-#     u = sampler.next()
-#     light_sphere_id = min(int(u * scene.num_light_spheres[None]), scene.num_light_spheres[None]-1)
-#     sphere_id = scene.light_spheres_id[light_sphere_id]
-#     light_sphere = scene.spheres[sphere_id]
-#     emissive_mat = scene.materials[light_sphere.material_id]
-#     light_color = emissive_mat.emissive
-#     inter_mat = scene.materials[inter.material_id]
-
-#     use_area_based_sampling = False
-
-#     sls = SurfaceLightSample()
-#     if use_area_based_sampling:
-#         #sls = sample_sphere_uniform(inter.point, light_sphere, sampler)
-#         #sls = sample_sphere_hemisphere_uniform(inter.point, light_sphere, sampler)
-#         sls = sample_sphere_hemisphere_cosine(inter.point, light_sphere, sampler)
-#     else:
-#         sls = sample_sphere_solid_angle(inter.point, light_sphere, sampler)
-   
-
-
-    
-#     pdf = sls.pdf / scene.num_light_spheres[None]
-
-#     point_to_sample = sls.point - inter.point
-#     dist = point_to_sample.norm()
-#     point_to_sample /= dist
-
-#     if use_area_based_sampling:
-#         # Remap pdf to area pdf
-#         cosl = sls.normal.dot(-point_to_sample)
-#         SA_to_area = cosl/(dist*dist);
-#         pdf /= SA_to_area;
-
-#     bsdf = bsdf_eval(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
-
-#     pdf_surface = bsdf_pdf(inter_mat, inter.normal, -inter.ray.direction, point_to_sample)
-
-#     cosi = abs(inter.normal.dot(point_to_sample))
-#     prod = bsdf * cosi
-#     value = vec3f(0.0)
-
-#     if prod.norm() > 0.0:
-#         # ray_light = Ray(inter.point, point_to_sample)
-#         # inter_light = intersect_scene(ray_light, scene, EPS, dist-EPS)
-#         # v = float(inter_light.hit == 0 or (inter_light.point - sls.point).norm() < 1e-4) 
-#         v = visibility(scene, inter.point + EPS * inter.normal, sls.point)
-#         value = v * light_color  * prod / pdf
-
-#     return Contribution(value, pdf), pdf_surface
 
 @ti.func
 def sample_light_contrib(scene: ti.template(), inter: Intersection, sampler: RandomSampler):

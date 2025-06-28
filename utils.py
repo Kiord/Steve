@@ -80,67 +80,7 @@ def random_direction_hemisphere(main_dir: vec3f, n: ti.f32, sampler: RandomSampl
     return (u * local.x + v * local.y + w * local.z).normalized()
 
 @ti.func
-def sample_BSDF(normal: vec3f, material:Material, incoming_dir: vec3f, sampler: RandomSampler) -> DirectionSample:# type: ignore
-    n = material.shininess
-    is_lambert = n < EPS
-
-    r = ti.select(is_lambert, normal, reflect(incoming_dir, normal))
-
-    sampled = DirectionSample(
-        direction=ti.Vector([0.0, 0.0, 0.0]),
-        pdf=0.0,
-        bsdf=ti.Vector([0.0, 0.0, 0.0])
-    )
-
-    sampled.direction = random_direction_hemisphere(r, max(n, 1.0), sampler)
-
-    cosr = r.dot(sampled.direction)
-    correct_r = 1.0 if cosr > 0.0 else -1.0
-    cosr *= correct_r
-    sampled.direction *= correct_r
-
-    coswo = normal.dot(sampled.direction)
-    ok = coswo > 0.0
-    cosr_pow_n = ti.pow(abs(cosr), n)
-
-    w = (n + 1.0 + float(is_lambert)) / (2.0 * math.pi)
-
-    sampled.pdf = float(ok) * w * (coswo if is_lambert else cosr_pow_n)
-    sampled.bsdf = float(ok) * w * material.albedo * cosr_pow_n
-
-    return sampled
-
-
-
-@ti.func
-def BSDF(material, normal, wi, wo):
-    n = material.shininess
-    is_lambert = n < EPS# 0.0
-    coswi = normal.dot(wi)
-    r = ti.select(is_lambert, normal, reflect(wo, normal))
-    cosr = wi.dot(r)
-    coswo = max(min(normal.dot(wo), 1.0), -1)
-    ok = (coswi > 0.0) and (cosr > 0.0) and (coswo > 0.0)
-    #ok = (coswi > 0.0) and (coswo > 0.0)
-    #ok = (cosr > 0.0) #and (coswo > 0.0)
-    bsdf = (material.albedo * ti.pow(cosr, n)) * (n + 1.0 + float(is_lambert)) / (2.0 * math.pi)
-    return float(ok) * bsdf
-
-@ti.func
-def PDF(material, normal, wi, wo):
-    n = material.shininess
-    is_lambert = n < EPS# 0.0
-    coswi = normal.dot(wi)
-    r = ti.select(is_lambert, normal, reflect(wo, normal))
-    cosr = wi.dot(r)
-    cosr_pow_n = ti.pow(cosr, n)
-    coswo = max(min(normal.dot(wo), 1.0), -1)
-    ok = (coswi > 0.0) and (cosr > 0.0) and (coswo > 0.0)
-    w = (n + 1.0 + float(is_lambert)) / (2.0 * math.pi)
-    return float(ok) * w * (coswo if is_lambert else cosr_pow_n)
-
-@ti.func
-def PDF_solid_angle_sphere(sphere:Sphere, viewer:vec3f):
+def pdf_solid_angle_sphere(sphere:Sphere, viewer:vec3f):
     main_direction = viewer - sphere.center
     d = main_direction.norm()
     sinthetamax = sphere.radius / d

@@ -21,11 +21,12 @@ def setup_veach_scene(scene:Scene, ffcc:FFCC):
     
     
     diffuse_white = scene.add_material([1,1,1],[0,0,0], 0)
+    emissive_white = scene.add_material([0,0,0],[1,1,1], 0)
     # x -> z
     # y -> x
     # z -> y
     scene.add_quad(scene_scale * 50.0 * np.array([0,-0.5,0]),  [scene_scale * 50.0] * 2, [1,0,0], 0, diffuse_white)
-    scene.add_quad(scene_scale * 50.0 * np.array([0, 0, 0.5]), [scene_scale * 50.0] * 2, [1,0,0], 0.5 * math.pi, diffuse_white)
+    scene.add_quad(scene_scale * 50.0 * np.array([0, 0, 0.5]), [scene_scale * 50.0] * 2, [1,0,0], 0.5 * math.pi, emissive_white)
 
     # // Spheres
     sphere_colors = [(1.0,0.1,0.1),(0.2,1.0,0.4),(1,0.15,1.0),(0.1,0.3, 1.0)]

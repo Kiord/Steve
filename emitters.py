@@ -1,9 +1,8 @@
 import taichi as ti
 from datatypes import vec3f
-from scene import Material, Sphere, Triangle
 from utils import LightSample, sample_sphere_solid_angle
 from ray import visibility
-from bsdf import bsdf_eval, bsdf_pdf
+from bsdf import bsdf_eval
 from constants import *
 
 
