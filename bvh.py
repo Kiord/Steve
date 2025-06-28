@@ -672,11 +672,12 @@ def aabbs_to_mesh(aabb_min, aabb_max):
 if __name__ == '__main__':
     import trimesh as tm
     from time import time
+    import utils
     mesh = tm.load_mesh('data/meshes/bunny.stl')
     print(mesh)
-    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4, bvh_type='median')
-    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4, bvh_type='median')
-    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4, bvh_type='median')
+    bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4, bvh_type='sweep')
+    # bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4, bvh_type='median')
+    # bvh_dict    = build_bvh(mesh.triangles.copy(), max_leaf_size=4, bvh_type='median')
     is_leaf, left_child, right_child, aabb_min, aabb_max, depth, max_leaf_size, binned, output_triangles_order = bvh_dict.values()
     
     print_bvh_summary(bvh_dict)
