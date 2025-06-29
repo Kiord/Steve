@@ -14,7 +14,7 @@ A lightweight path tracing viewer and renderer written in Taichi
 - ✅ ACES + gamma tone mapping 
 - ✅ simple denoising
 - ✅ Plane, Sphere and Triangle intersection
-- ✅ Sphere sampling (lights)
+- ✅ Sphere & Triangle lights
 - ✅ Direct Illumination MIS
 - ✅ Analytic environnment map
 - ✅ Pixel-stable sampler
