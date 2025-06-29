@@ -9,6 +9,32 @@ import pyvista as pv
 from utils import load_mesh
 from bvh import print_bvh_summary
 
+def setup_spheres_scene(scene:Scene, ffcc:FFCC):
+    
+    lambert_white = scene.add_material(create_lambert([1,1,1]))
+    emissive_white = scene.add_material(create_lambert([0,0,0], [2,2,2]))
+
+    shininesses = [1, 10, 50, 150, 500, 2000]
+    roughnesses = [0.01, 0.05, 0.15, 0.3, 0.5, 0.8]
+
+    scene.add_sphere((0,0.5,0), 0.5, lambert_white)
+
+    for i in range(6):
+        scene.add_sphere((1,0.5,i-6//2), 0.5, scene.add_material(create_phong([1,1,1], shininesses[i])))
+        scene.add_sphere((-1,0.5,i-6//2), 0.5, scene.add_material(create_ggx([1,1,1], roughnesses[i])))
+
+    ffcc.set_look_at((3,3,3), (0,0.5,0))
+
+    #scene.add_quad((0,5,0), (3,3,3), (1,0,0), 0, emissive_white)
+    scene.add_sphere((0,5,0),1,emissive_white)
+
+    scene.add_plane([0,0,0], [0,1,0], lambert_white)
+
+    scene.ground_color[None] =  ti.Vector([0,0,0])
+    scene.horizon_color[None] = ti.Vector([0,0,0])
+    scene.sky_color[None] = ti.Vector([0,0,0])
+    scene.sun_color[None] = ti.Vector([0,0,0])
+
 def setup_veach_scene(scene:Scene, ffcc:FFCC):
     # Camera
     scene_scale = 1

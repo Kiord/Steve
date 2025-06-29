@@ -20,7 +20,8 @@ class FreeFlyCameraController:
     
     def set_look_at(self, pos:np.ndarray, target:np.ndarray):
         self.pos = np.asanyarray(pos, dtype=np.float32)
-        dir = target - pos
+        target = np.asanyarray(target, dtype=np.float32)
+        dir = target - self.pos
         dir = dir / np.linalg.norm(dir)
 
         # Calculate pitch and yaw from direction vector

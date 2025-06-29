@@ -91,7 +91,8 @@ def sample_triangle_emitter(scene: ti.template(), inter, sampler) -> LightSample
     edge1 = tri.v1 - tri.v0
     edge2 = tri.v2 - tri.v0
     area = 0.5 * edge1.cross(edge2).norm()
-    pdf = 1.0 / (area * ti.max(num, 1))
+    #pdf = 1.0 / (area * ti.max(num, 1))
+    pdf = 1.0# / area
 
     mat_surface = scene.materials[inter.material_id]
     bsdf_val = bsdf_eval(mat_surface, inter.normal, -inter.ray.direction, dir)

@@ -23,7 +23,7 @@ class RenderBuffers:
 
 
 @ti.func
-def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> Contribution:  # type: ignore
+def sample_bsdf_contrib_mis(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> Contribution:  # type: ignore
     contrib= Contribution(vec3f(0.0, 0.0, 0.0), 0.0)
     mat = scene.materials[inter.material_id]
     #ds = sample_BSDF(inter.normal, mat, inter.ray.direction, sampler)
@@ -47,7 +47,7 @@ def sample_bsdf_contrib(scene:ti.template(), inter : Intersection, sampler: Rand
     return contrib, pdf_light
 
 @ti.func
-def sample_light_contrib(scene: ti.template(), inter: Intersection, sampler: RandomSampler):
+def sample_light_contrib_mis(scene: ti.template(), inter: Intersection, sampler: RandomSampler):
     total_lights = scene.num_light_spheres[None] + scene.num_light_triangles[None]
     ls = LightSample(direction=vec3f(0.0), contrib=vec3f(0.0), pdf=0.0)
 
@@ -77,15 +77,15 @@ def balance_heuristic(pdf_a: ti.f32, pdf_b: ti.f32) -> ti.f32:# type: ignore
 
 @ti.func
 def sample_mis_contrib(scene: ti.template(), inter: Intersection, sampler: RandomSampler) -> vec3f:  # type: ignore
-    light_contrib, pdf_surface = sample_light_contrib(scene, inter, sampler)
-    bsdf_contrib, pdf_light = sample_bsdf_contrib(scene, inter, sampler)
+    light_contrib, pdf_surface = sample_light_contrib_mis(scene, inter, sampler)
+    bsdf_contrib, pdf_light = sample_bsdf_contrib_mis(scene, inter, sampler)
     # Compute weights
     w_light = balance_heuristic(light_contrib.pdf, pdf_surface)
     w_bsdf  = balance_heuristic(bsdf_contrib.pdf, pdf_light)
     # w_light = balance_heuristic(light_contrib.pdf, bsdf_contrib.pdf)
     # w_bsdf  = balance_heuristic(bsdf_contrib.pdf, light_contrib.pdf)
-
-    return  w_light * light_contrib.value + w_bsdf * bsdf_contrib.value
+    return w_light * light_contrib.value + w_bsdf * bsdf_contrib.value
+    #return w_light * vec3f(1,0,0) + w_bsdf * vec3f(0,1,0)
     #return vec3f(light_contrib.pdf, bsdf_contrib.pdf, 0)
 
 @ti.func

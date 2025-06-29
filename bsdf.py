@@ -106,22 +106,22 @@ def pdf_lambert(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> ti.f
 @ti.func
 def sample_phong(material: Material, normal: vec3f, incoming: vec3f, sampler) -> DirectionSample:
     ds = empty_direction_sample()
-    reflect_dir = reflect(incoming, normal)
-    dir = random_direction_hemisphere(reflect_dir, material.shininess, sampler)
-    cos_theta = normal.dot(dir)
-    cos_alpha = reflect_dir.dot(dir)
+    r = reflect(incoming, normal)
+    wo = random_direction_hemisphere(r, material.shininess, sampler)
+    cos_theta = normal.dot(wo)
+    cos_alpha = abs(r.dot(wo))
 
     if cos_theta > 0 and cos_alpha > 0:
         pdf = ((material.shininess + 1.0) * ti.pow(cos_alpha, material.shininess)) / (2.0 * ti.math.pi)
         bsdf = material.albedo * ((material.shininess + 2.0) / (2.0 * ti.math.pi)) * ti.pow(cos_alpha, material.shininess)
-        ds = DirectionSample(dir, pdf, bsdf)
+        ds = DirectionSample(wo, pdf, bsdf)
     return ds
 
 @ti.func
 def eval_phong(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> vec3f:
     result = vec3f(0.0)
     r = reflect(wi, normal)
-    cos_alpha = r.dot(wo)
+    cos_alpha = abs(r.dot(wo))
     cos_theta = normal.dot(wo)
     if cos_alpha > 0 and cos_theta > 0:
         result = material.albedo * ((material.shininess + 2.0) / (2.0 * ti.math.pi)) * ti.pow(cos_alpha, material.shininess)
@@ -131,7 +131,7 @@ def eval_phong(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> vec3f
 def pdf_phong(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> ti.f32:
     result = 0.0
     r = reflect(wi, normal)
-    cos_alpha = r.dot(wo)
+    cos_alpha = abs(r.dot(wo))
     if cos_alpha > 0:
         result = ((material.shininess + 1.0) * ti.pow(cos_alpha, material.shininess)) / (2.0 * ti.math.pi)
     return result

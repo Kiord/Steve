@@ -12,7 +12,7 @@ from control import FreeFlyCameraController
 from timer import FrameTimer
 from app_state import AppState
 from ui import build_ui
-from sample_scenes import setup_veach_scene, setup_suzanne_scene, setup_dragon_scene, setup_cornell_scene
+from sample_scenes import setup_veach_scene, setup_suzanne_scene, setup_dragon_scene, setup_cornell_scene, setup_spheres_scene
 
 @click.command()
 @click.option('--profiling', '-p', type=click.BOOL, default=False, help='Ënable profiling')
@@ -49,9 +49,9 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
     camera_controller = FreeFlyCameraController(state)
     camera_controller.update_camera_field(camera)
 
-
+    setup_spheres_scene(scene, camera_controller)
     #setup_veach_scene(scene, camera_controller)
-    setup_cornell_scene(scene, camera_controller)
+    #setup_cornell_scene(scene, camera_controller)
     #setup_suzanne_scene(scene, camera_controller)
     #setup_dragon_scene(scene, camera_controller)
     #setup_scene(scene)
