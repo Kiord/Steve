@@ -20,10 +20,11 @@ A lightweight path tracing viewer and renderer written in Taichi
 - ✅ Pixel-stable sampler
 - ✅ Mesh loading
 - ✅ BVH
+- ✅ BSDF & light logics separated from integrator logic
 - 🟡 CLI
+- 🟡 More materials (GGX ? Disney BSDF?)
 - ❌ Environment map sampling
 - ❌ Texture & normal mapping
-- ❌ More materials (GGX ? Disney BSDF?)
 - ❌ Framebuffer export
 - ❌ Depth of field
 - ❌ Data oriented design refactor ?
