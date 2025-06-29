@@ -12,7 +12,7 @@ from control import FreeFlyCameraController
 from timer import FrameTimer
 from app_state import AppState
 from ui import build_ui
-from sample_scenes import setup_veach_scene, setup_suzanne_scene, setup_dragon_scene
+from sample_scenes import setup_veach_scene, setup_suzanne_scene, setup_dragon_scene, setup_cornell_scene
 
 @click.command()
 @click.option('--profiling', '-p', type=click.BOOL, default=False, help='Ënable profiling')
@@ -29,7 +29,7 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
     else:
         print(f'[Error] unavailable backend "{arch}"')
 
-    ti.init(arch=arch, default_fp=ti.f32, kernel_profiler=profiling)
+    ti.init(arch=arch, default_fp=ti.f32, kernel_profiler=profiling, offline_cache=True)
     #import time
     #time.sleep(0.5)
 
@@ -50,7 +50,8 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
     camera_controller.update_camera_field(camera)
 
 
-    setup_veach_scene(scene, camera_controller)
+    #setup_veach_scene(scene, camera_controller)
+    setup_cornell_scene(scene, camera_controller)
     #setup_suzanne_scene(scene, camera_controller)
     #setup_dragon_scene(scene, camera_controller)
     #setup_scene(scene)

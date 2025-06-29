@@ -11,7 +11,35 @@ class Material:
     albedo: vec3f # type: ignore
     emissive: vec3f # type: ignore
     shininess: ti.f32 # type: ignore
+    roughness: ti.f32
     bsdf_type: ti.i32 # type: ignore
+
+def create_lambert(albedo, emissive=(0, 0, 0)):
+    return Material(
+        albedo=ti.Vector(list(albedo)),
+        emissive=ti.Vector(list(emissive)),
+        shininess=0.0,
+        roughness=0.0,
+        bsdf_type=BSDF_LAMBERT
+    )
+
+def create_phong(albedo, shininess, emissive=(0, 0, 0)):
+    return Material(
+        albedo=ti.Vector(list(albedo)),
+        emissive=ti.Vector(list(emissive)),
+        shininess=shininess,
+        roughness=0.0,
+        bsdf_type=BSDF_PHONG
+    )
+
+def create_ggx(albedo, roughness, emissive=(0, 0, 0)):
+    return Material(
+        albedo=ti.Vector(list(albedo)),
+        emissive=ti.Vector(list(emissive)),
+        shininess=0.0,
+        roughness=roughness,
+        bsdf_type=BSDF_GGX
+    )
 
 @ti.dataclass
 class Sphere:
@@ -154,15 +182,21 @@ class Scene:
         self.sun_color[None] = 1 * vec3f(5.0, 4.5, 3.0)  # warm bright sun
         self.sun_size[None] = 0.01  # sharpness of falloff (lower = smaller sun)
     
-    def add_material(self, albedo, emissive, shininess):
-        material_id = self.num_materials[None]
+    # def add_material(self, albedo, emissive, shininess):
+    #     material_id = self.num_materials[None]
+    #     self.num_materials[None] += 1
+    #     bsdf_type = BSDF_PHONG if shininess > EPS else BSDF_LAMBERT
+    #     self.materials[material_id] =  Material(albedo=ti.Vector(list(albedo)), 
+    #                                             emissive=ti.Vector(list(emissive)), 
+    #                                             shininess=shininess,
+    #                                             bsdf_type=bsdf_type)
+    #     return material_id
+    
+    def add_material(self, mat: Material):
+        mat_id = self.num_materials[None]
+        self.materials[mat_id] = mat
         self.num_materials[None] += 1
-        bsdf_type = BSDF_PHONG if shininess > EPS else BSDF_LAMBERT
-        self.materials[material_id] =  Material(albedo=ti.Vector(list(albedo)), 
-                                                emissive=ti.Vector(list(emissive)), 
-                                                shininess=shininess,
-                                                bsdf_type=bsdf_type)
-        return material_id
+        return mat_id
 
     def add_sphere(self, center:np.ndarray, radius:float, material_id:int):
         idx = self.num_spheres[None]

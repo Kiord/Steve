@@ -1,5 +1,5 @@
 import taichi as ti
-from scene import Scene, Material
+from scene import Scene, create_lambert, create_ggx, create_phong
 from camera import Camera
 from control import FreeFlyCameraController as FFCC
 import numpy as np
@@ -20,8 +20,9 @@ def setup_veach_scene(scene:Scene, ffcc:FFCC):
     ffcc.fov = 40
     
     
-    diffuse_white = scene.add_material([1,1,1],[0,0,0], 0)
-    emissive_white = scene.add_material([0,0,0],[1,1,1], 0)
+    
+    diffuse_white = scene.add_material(create_lambert([1,1,1],[0,0,0]))
+    emissive_white = scene.add_material(create_lambert([0,0,0],[1,1,1]))
     # x -> z
     # y -> x
     # z -> y
@@ -36,7 +37,8 @@ def setup_veach_scene(scene:Scene, ffcc:FFCC):
     shift = np.array([-7.0, 0, 0])
     base = np.array([10.0 , -5.0, 18.0])
     for i in range(4):
-        material_id = scene.add_material([0,0,0], np.array(sphere_colors[i]) * color_multipliers[i] / sphere_sizes[i], 0)
+        material = create_lambert([0,0,0], np.array(sphere_colors[i]) * color_multipliers[i] / sphere_sizes[i])
+        material_id = scene.add_material(material)
         scene.add_sphere(scene_scale * (base + shift * i), scene_scale * sphere_sizes[i], material_id)
 
     # Panels
@@ -48,7 +50,8 @@ def setup_veach_scene(scene:Scene, ffcc:FFCC):
     offset = np.array([0,-22.0,0]) * scene_scale
     scale = np.array([5.0, 25.0]) * scene_scale
     for i in range(4):
-        material_id = scene.add_material([1,1,1], [0,0,0], multiplier * shininesses[i])
+        material = create_phong([1,1,1], multiplier * shininesses[i], [0,0,0])
+        material_id = scene.add_material(material)
         scene.add_quad(offset + shifts[i], scale, [1,0,0], -angles[i], material_id)
 
     scene.ground_color[None] =  ti.Vector([0,0,0])
@@ -62,6 +65,100 @@ def setup_veach_scene(scene:Scene, ffcc:FFCC):
 
 
     #scene.add_plane([0,0,0], [0,1,0], mat1)
+
+def setup_cornell_scene(scene: Scene, ffcc: FFCC):
+    room_size = 5.0
+    half = room_size * 0.5
+    z_center = 5.0
+
+    # CAMERA — pull back further and aim into box
+    ffcc.pos = np.array([0.0, half, z_center + 7.0])
+    ffcc.yaw = -90.0  # looking into -Z
+    ffcc.pitch = 0.0
+    ffcc.fov = 40.0
+    ffcc.move_speed = 2.0
+
+    # MATERIALS
+    white = scene.add_material(create_lambert([0.75, 0.75, 0.75]))
+    white_ggx = scene.add_material(create_ggx([0.75, 0.75, 0.75], 0.5))
+    red   = scene.add_material(create_lambert([0.75, 0.1, 0.1]))
+    green = scene.add_material(create_lambert([0.1, 0.75, 0.1]))
+    light = scene.add_material(create_lambert([0, 0, 0], [15, 15, 15]))
+
+    def Z(p): return [p[0], p[1], p[2] + z_center]
+
+    # ROOM: floor, ceiling, walls, back
+    scene.add_quad(Z([0, 0, 0]), [room_size, room_size], [0, 0, 1], 0, white)                         # Floor
+    scene.add_quad(Z([0, room_size, 0]), [room_size, room_size], [0, 0, 1], math.pi, white)           # Ceiling (flipped)
+    scene.add_quad(Z([0, half, -half]), [room_size, room_size], [1, 0, 0], -0.5 * math.pi, white)     # Back wall
+    scene.add_quad(Z([-half, half, 0]), [room_size, room_size], [0, 0, 1], 0.5 * math.pi, green)      # Left wall
+    scene.add_quad(Z([half, half, 0]), [room_size, room_size], [0, 0, 1], -0.5 * math.pi, red)        # Right wall
+
+    # LIGHT — properly centered on ceiling
+    light_size = 1.0
+    scene.add_sphere(Z([0, room_size - 0.1, 0]), 1.0, light)
+    #scene.add_quad(Z([0, room_size - 0.1, 0]), [1.0, 1.0], [0, -1, 0], 0, light)
+
+    # BLOCKS — full 5 sides, fixed face quads
+    def add_block_triangles(center, size, material_id, rotation_degrees=0.0):
+        cx, cy, cz = Z(center)
+        sx, sy, sz = size
+        hx, hy, hz = sx / 2, sy / 2, sz / 2
+
+        # Rotation around Y-axis
+        theta = math.radians(rotation_degrees)
+        cos_theta = math.cos(theta)
+        sin_theta = math.sin(theta)
+
+        def rotate_y(p):
+            dx = p[0] - cx
+            dz = p[2] - cz
+            x = cos_theta * dx - sin_theta * dz + cx
+            z = sin_theta * dx + cos_theta * dz + cz
+            return [x, p[1], z]
+
+        # 8 corners
+        corners = {
+            'blf': [cx - hx, cy - hy, cz - hz],
+            'brf': [cx + hx, cy - hy, cz - hz],
+            'tlf': [cx - hx, cy + hy, cz - hz],
+            'trf': [cx + hx, cy + hy, cz - hz],
+            'blb': [cx - hx, cy - hy, cz + hz],
+            'brb': [cx + hx, cy - hy, cz + hz],
+            'tlb': [cx - hx, cy + hy, cz + hz],
+            'trb': [cx + hx, cy + hy, cz + hz],
+        }
+
+        p = {k: rotate_y(v) for k, v in corners.items()}
+
+        # Build faces
+        scene.add_triangle(p['tlf'], p['trf'], p['brf'], material_id)
+        scene.add_triangle(p['brf'], p['blf'], p['tlf'], material_id)
+
+        scene.add_triangle(p['trb'], p['tlb'], p['blb'], material_id)
+        scene.add_triangle(p['blb'], p['brb'], p['trb'], material_id)
+
+        scene.add_triangle(p['tlb'], p['tlf'], p['blf'], material_id)
+        scene.add_triangle(p['blf'], p['blb'], p['tlb'], material_id)
+
+        scene.add_triangle(p['trf'], p['trb'], p['brb'], material_id)
+        scene.add_triangle(p['brb'], p['brf'], p['trf'], material_id)
+
+        scene.add_triangle(p['tlb'], p['trb'], p['trf'], material_id)
+        scene.add_triangle(p['trf'], p['tlf'], p['tlb'], material_id)
+
+    add_block_triangles(center=[-1.0, 1.0, -0.9], size=[1.0, 2.0, 1.0], material_id=white, rotation_degrees=15)
+
+    # Short block: rotate ~-10° CW
+    add_block_triangles(center=[1.0, 0.6, 1.0], size=[1.2, 1.2, 1.2], material_id=white_ggx, rotation_degrees=-10)
+
+    # DISABLE ENVIRONMENT LIGHT
+    scene.ground_color[None] = ti.Vector([0, 0, 0])
+    scene.horizon_color[None] = ti.Vector([0, 0, 0])
+    scene.sky_color[None] = ti.Vector([0, 0, 0])
+    scene.sun_color[None] = ti.Vector([0, 0, 0])
+
+
 
 def setup_suzanne_scene(scene:Scene, ffcc:FFCC):
     # Camera
