@@ -109,7 +109,7 @@ def sample_phong(material: Material, normal: vec3f, incoming: vec3f, sampler) ->
     r = reflect(incoming, normal)
     wo = random_direction_hemisphere(r, material.shininess, sampler)
     cos_theta = normal.dot(wo)
-    cos_alpha = abs(r.dot(wo))
+    cos_alpha = r.dot(wo)
 
     if cos_theta > 0 and cos_alpha > 0:
         pdf = ((material.shininess + 1.0) * ti.pow(cos_alpha, material.shininess)) / (2.0 * ti.math.pi)
@@ -120,8 +120,8 @@ def sample_phong(material: Material, normal: vec3f, incoming: vec3f, sampler) ->
 @ti.func
 def eval_phong(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> vec3f:
     result = vec3f(0.0)
-    r = reflect(wi, normal)
-    cos_alpha = abs(r.dot(wo))
+    r = reflect(-wi, normal)
+    cos_alpha = r.dot(wo)
     cos_theta = normal.dot(wo)
     if cos_alpha > 0 and cos_theta > 0:
         result = material.albedo * ((material.shininess + 2.0) / (2.0 * ti.math.pi)) * ti.pow(cos_alpha, material.shininess)
@@ -130,8 +130,8 @@ def eval_phong(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> vec3f
 @ti.func
 def pdf_phong(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> ti.f32:
     result = 0.0
-    r = reflect(wi, normal)
-    cos_alpha = abs(r.dot(wo))
+    r = reflect(-wi, normal)
+    cos_alpha = r.dot(wo)
     if cos_alpha > 0:
         result = ((material.shininess + 1.0) * ti.pow(cos_alpha, material.shininess)) / (2.0 * ti.math.pi)
     return result
