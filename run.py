@@ -5,14 +5,16 @@ import numpy as np
 
 from scene import Scene
 from camera import Camera
-from path_tracing import render
+from path_tracing import render, reset_accum_buffers
 from denoising import bilateral_filter
-from tone_mapping import tone_map
+from tone_mapping import tone_map, tone_map_into
 from control import FreeFlyCameraController
 from timer import FrameTimer
 from app_state import AppState
 from ui import build_ui
 from sample_scenes import setup_veach_scene, setup_suzanne_scene, setup_dragon_scene, setup_cornell_scene, setup_spheres_scene
+from constants import *
+
 
 @click.command()
 @click.option('--profiling', '-p', type=click.BOOL, default=False, help='Ënable profiling')
@@ -68,17 +70,28 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
         camera_controller.update_from_input(window, dt)
         camera_controller.update_camera_field(camera)
 
+        if state.frame_id == 0:
+            reset_accum_buffers(state.buffers)
+
         if state.profiling:
             ti.profiler.clear_kernel_profiler_info()
-
+        
+        max_depth = 1 if state.mode_id >= RENDER_ALBEDO else state.max_depth
         render(scene, camera, spp=state.spp,
-               max_depth=1 if state.mode_id != 0 else state.max_depth,
+               max_depth=max_depth,
                buffers=state.buffers,
                width=state.width, height=state.height,
                frame_id=state.frame_id)
 
-        if state.mode_id == 0:
-            final_buffer = state.buffers.final_buffer
+        if state.mode_id <= RENDER_MIS_WEIGHTS:
+            if state.mode_id <= RENDER_COLOR:
+                final_buffer = state.buffers.accum_color
+            elif state.mode_id == RENDER_DIRECT_LIGHT:
+                final_buffer = state.buffers.accum_direct_light 
+            elif state.mode_id == RENDER_DIRECT_BSDF:
+                final_buffer = state.buffers.accum_direct_bsdf  
+            elif state.mode_id == RENDER_MIS_WEIGHTS:
+                final_buffer = state.buffers.accum_mis_weights
             if state.denoising:
                 bilateral_filter(state.buffers,
                                 sigma_color=state.sigma_color,
@@ -86,17 +99,18 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
                                 sigma_spatial=state.sigma_spatial,
                                 radius=state.radius)
                 final_buffer = state.buffers.denoised
-            if state.tone_mapping:
-                tone_map(final_buffer)
-        elif state.mode_id == 1:
+            if state.mode_id != RENDER_MIS_WEIGHTS and state.tone_mapping:
+                tone_map_into(final_buffer, state.buffers.final_buffer)
+                final_buffer = state.buffers.final_buffer
+        elif state.mode_id == RENDER_ALBEDO:
             final_buffer = state.buffers.albedo
-        elif state.mode_id == 2:
+        elif state.mode_id == RENDER_NORMAL:
             final_buffer = state.buffers.normal.to_numpy() * 0.5 + 0.5
-        elif state.mode_id == 3:
+        elif state.mode_id == RENDER_BVH_DEPTH:
             final_buffer = np.clip(np.log(0.2*np.clip(state.buffers.bvh_depth.to_numpy(), min=1)), min=0)
-        elif state.mode_id == 4:
+        elif state.mode_id == RENDER_DEPTH:
             final_buffer = np.clip(np.log(state.buffers.depth.to_numpy()), min=0)
-        elif state.mode_id == 5:
+        elif state.mode_id == RENDER_BOX_TEST_COUNT:
             final_buffer = np.clip(np.log(0.05*np.clip(state.buffers.box_test_count.to_numpy(), min=1)), min=0)
       
         canvas.set_image(final_buffer)

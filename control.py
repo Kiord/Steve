@@ -3,7 +3,7 @@ import numpy as np
 from camera import compute_camera_vectors
 from constants import UP
 from app_state import AppState
-
+from constants import *
 
 
 class FreeFlyCameraController:
@@ -49,7 +49,7 @@ class FreeFlyCameraController:
     def update_from_input(self, gui :ti.ui.Window, dt):
         forward, right, _ = self.get_view_dirs()
 
-        for key in ["w", "s", "d", "a", " ", "Control", "Left", "Right", "Up", "Down", "g"]:
+        for key in ["w", "s", "d", "a", " ", "Control", "Left", "Right", "Up", "Down"]:
             if gui.is_pressed(key):
                 self.app_state.frame_id = 0
 
@@ -76,8 +76,8 @@ class FreeFlyCameraController:
             self.pitch = max(self.pitch - self.turn_speed * dt, -89.0)
         
         if gui.is_pressed("g"):
-            self.app_state.mode_id = (self.app_state.mode_id + 1) % len(AppState.modes)
-            print(f'Mode : {AppState.modes[self.app_state.mode_id]}')
+            self.app_state.mode_id = (self.app_state.mode_id + 1) % RENDER_NUM_MODES
+            print(f'Mode : {RENDER_MODE_NAMES[self.app_state.mode_id]}')
         
 
     def update_camera_field(self, camera_field):

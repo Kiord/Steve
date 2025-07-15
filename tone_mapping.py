@@ -47,3 +47,9 @@ def tone_map(buffer:ti.template()): # type: ignore
     for i, j in buffer:
         buffer[i, j] = exposure_correct(buffer[i, j], 2.1, -0.8)
         buffer[i, j] = aces_filmic_tone_map(buffer[i, j])
+
+@ti.kernel
+def tone_map_into(buffer:ti.template(), target:ti.template()): # type: ignore
+    for i, j in buffer:
+        target[i, j] = exposure_correct(buffer[i, j], 2.1, -0.8)
+        target[i, j] = aces_filmic_tone_map(target[i, j])

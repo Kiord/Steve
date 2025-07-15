@@ -1,7 +1,7 @@
 from path_tracing import RenderBuffers
 
 class AppState:
-    modes = ['render', 'albedo', 'normal', 'bvh_depth', 'depth', 'box_test_count']
+
 
     def __init__(self, width=1200, height=800):
         self.width = width
