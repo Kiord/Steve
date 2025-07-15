@@ -92,16 +92,17 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
                 final_buffer = state.buffers.accum_direct_bsdf  
             elif state.mode_id == RENDER_MIS_WEIGHTS:
                 final_buffer = state.buffers.accum_mis_weights
-            if state.denoising:
-                bilateral_filter(state.buffers,
-                                sigma_color=state.sigma_color,
-                                sigma_normal=state.sigma_normal,
-                                sigma_spatial=state.sigma_spatial,
-                                radius=state.radius)
-                final_buffer = state.buffers.denoised
-            if state.mode_id != RENDER_MIS_WEIGHTS and state.tone_mapping:
-                tone_map_into(final_buffer, state.buffers.final_buffer)
-                final_buffer = state.buffers.final_buffer
+            if state.mode_id != RENDER_MIS_WEIGHTS:
+                if state.denoising:
+                    bilateral_filter(state.buffers,
+                                    sigma_color=state.sigma_color,
+                                    sigma_normal=state.sigma_normal,
+                                    sigma_spatial=state.sigma_spatial,
+                                    radius=state.radius)
+                    final_buffer = state.buffers.denoised
+                if state.tone_mapping:
+                    tone_map_into(final_buffer, state.buffers.final_buffer)
+                    final_buffer = state.buffers.final_buffer
         elif state.mode_id == RENDER_ALBEDO:
             final_buffer = state.buffers.albedo
         elif state.mode_id == RENDER_NORMAL:
