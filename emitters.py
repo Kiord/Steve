@@ -1,18 +1,66 @@
 import taichi as ti
 from datatypes import vec3f
-from utils import LightSample, sample_sphere_solid_angle
+from utils import sample_sphere_solid_angle, pdf_solid_angle_sphere
 from ray import visibility
 from bsdf import bsdf_eval
 from constants import *
 
+@ti.dataclass
+class LightSample:
+    direction: vec3f# type: ignore
+    contrib: vec3f# type: ignore
+    pdf: ti.f32# type: ignore
+
+@ti.dataclass
+class EmitterSample():
+    primitive_id : ti.i32 # type: ignore
+    type: ti.i32 #type: ignore
+    pdf: ti.f32 # type: ignore
 
 @ti.func
-def emitter_sample(emitter_type: ti.i32, scene: ti.template(), inter, sampler) -> LightSample:
+def sample_emissive_primitive(scene: ti.template(), sampler) -> EmitterSample:
+    u = sampler.next() * scene.total_emissive_area[None]
+    accum = 0.0
+    emitter_sample = EmitterSample(0, EMITTER_NONE, 1.0)
+
+    for i in range(scene.num_emissive_primitives[None]):
+        entry = scene.emissive_primitives[i]
+        accum += entry.area
+        if u < accum:
+            emitter_sample.primitive_id = entry.index
+            emitter_sample.type = entry.type
+            emitter_sample.pdf = entry.area / scene.total_emissive_area[None]
+            break
+
+    return emitter_sample
+
+@ti.func
+def pdf_solid_angle(scene: ti.template(), inter) -> ti.f32:
+    pdf = 0.0
+    wi = -inter.ray.direction
+    if inter.primitive_type == PRIMITIVE_TRIANGLE:
+        pdf_area = 1.0 / scene.total_emissive_area[None]
+        cos_light = abs(wi.dot(inter.normal))
+        pdf = (pdf_area * inter.t * inter.t) / max(cos_light, EPS)
+
+    elif inter.primitive_type == PRIMITIVE_SPHERE:
+        sphere = scene.spheres[inter.primitive_id]
+        viewer = inter.ray.origin
+        pdf = pdf_solid_angle_sphere(sphere, viewer) * sphere.area / scene.total_emissive_area[None]
+
+    return pdf
+
+@ti.func
+def emitter_sample(scene: ti.template(), inter, sampler) -> LightSample:
+    emitter_sample = sample_emissive_primitive(scene, sampler)
+
     sample = LightSample(direction=vec3f(0.0), contrib=vec3f(0.0), pdf=0.0)
-    if emitter_type == EMITTER_SPHERE:
-        sample = sample_sphere_emitter(scene, inter, sampler)
-    elif emitter_type == EMITTER_TRIANGLE:
-        sample = sample_triangle_emitter(scene, inter, sampler)
+    if emitter_sample.type == EMITTER_SPHERE:
+        sample = sample_sphere_emitter(scene, inter, emitter_sample, sampler)
+    elif emitter_sample.type == EMITTER_TRIANGLE:
+        sample = sample_triangle_emitter(scene, inter, emitter_sample, sampler)
+    else:
+        sample = LightSample(direction=vec3f(0.0), contrib=vec3f(0.0), pdf=0.0)
     return sample
 
 # -------------------------------------------------------------------------
@@ -20,16 +68,9 @@ def emitter_sample(emitter_type: ti.i32, scene: ti.template(), inter, sampler) -
 # -------------------------------------------------------------------------
 
 @ti.func
-def sample_sphere_emitter(scene: ti.template(), inter, sampler) -> LightSample:
-    sample = LightSample(direction=vec3f(0.0), contrib=vec3f(0.0), pdf=0.0)
-
-    num = scene.num_light_spheres[None]
-    has_spheres = num > 0
-
-    u = sampler.next()
-    sphere_idx = int(u * num) if has_spheres else 0
-    light_id = scene.light_spheres_id[sphere_idx]
-    sphere = scene.spheres[light_id]
+def sample_sphere_emitter(scene: ti.template(), inter, emitter_sample, sampler) -> LightSample:
+    
+    sphere = scene.spheres[emitter_sample.primitive_id]
     mat = scene.materials[sphere.material_id]
 
     sls = sample_sphere_solid_angle(inter.point, sphere, sampler)
@@ -37,42 +78,28 @@ def sample_sphere_emitter(scene: ti.template(), inter, sampler) -> LightSample:
     dir = hit_pos - inter.point
     dist = dir.norm()
     dir = dir / ti.max(dist, EPS)
-
-    pdf = sls.pdf / ti.max(num, 1)
+    
+    pdf_solid_angle = emitter_sample.pdf * sls.pdf
+    #pdf = sls.pdf / ti.max(num, 1)
 
     mat_surface = scene.materials[inter.material_id]
     bsdf_val = bsdf_eval(mat_surface, inter.normal, -inter.ray.direction, dir)
     cos_theta = max(0.0, inter.normal.dot(dir))
     vis = visibility(scene, inter.point + EPS * inter.normal, hit_pos)
 
-    contrib = vis * mat.emissive * bsdf_val * cos_theta / pdf
+    contrib = vis * mat.emissive * bsdf_val * cos_theta / pdf_solid_angle
 
-    if has_spheres:
-        sample.direction = dir
-        sample.contrib = contrib
-        sample.pdf = pdf
-
-    return sample
+    return LightSample(direction=dir, contrib=contrib, pdf=pdf_solid_angle)
 
 # -------------------------------------------------------------------------
 #  TRIANGLE EMITTER IMPLEMENTATION
 # -------------------------------------------------------------------------
 
 @ti.func
-def sample_triangle_emitter(scene: ti.template(), inter, sampler) -> LightSample:
-    sample = LightSample(direction=vec3f(0.0), contrib=vec3f(0.0), pdf=0.0)
-
-    num = scene.num_light_triangles[None]
-    has_triangles = num > 0
-
-    u = sampler.next()
-    tri_idx = int(u * num) if has_triangles else 0
-    tri_id = scene.light_triangles_id[tri_idx]
-    tri = scene.triangles[tri_id]
+def sample_triangle_emitter(scene: ti.template(), inter, emitter_sample, sampler) -> LightSample:
+    
+    tri = scene.triangles[emitter_sample.primitive_id]
     mat = scene.materials[tri.material_id]
-
-    is_emissive = mat.emissive.norm() > 0.0
-    active = has_triangles and is_emissive
 
     u1 = sampler.next()
     u2 = sampler.next()
@@ -82,28 +109,24 @@ def sample_triangle_emitter(scene: ti.template(), inter, sampler) -> LightSample
     b2 = sqrt_u1 * u2
 
     hit_pos = b0 * tri.v0 + b1 * tri.v1 + b2 * tri.v2
-    normal = tri.normal
 
     dir = hit_pos - inter.point
     dist = dir.norm()
     dir = dir / ti.max(dist, EPS)
 
-    edge1 = tri.v1 - tri.v0
-    edge2 = tri.v2 - tri.v0
-    area = 0.5 * edge1.cross(edge2).norm()
-    #pdf = 1.0 / (area * ti.max(num, 1))
-    pdf = 1.0# / area
+ 
+    #pdf_area = triangle_pdf * (1 / area_triangle)
+    # = (area_triangle / total_emissive_area) * (1 / area_triangle)
+    # = 1 / total_emissive_area
+    pdf_area = 1.0 / scene.total_emissive_area[None]
+    pdf_solid_angle = (pdf_area * dist * dist) / ti.abs(tri.normal.dot(dir))
+
 
     mat_surface = scene.materials[inter.material_id]
     bsdf_val = bsdf_eval(mat_surface, inter.normal, -inter.ray.direction, dir)
     cos_theta = max(0.0, inter.normal.dot(dir))
     vis = visibility(scene, inter.point + EPS * inter.normal, hit_pos)
 
-    contrib = vis * mat.emissive * bsdf_val * cos_theta / pdf
+    contrib = vis * mat.emissive * bsdf_val * cos_theta / pdf_solid_angle
 
-    if active:
-        sample.direction = dir
-        sample.contrib = contrib
-        sample.pdf = pdf
-
-    return sample
+    return LightSample(direction=dir, contrib=contrib, pdf=pdf_solid_angle)

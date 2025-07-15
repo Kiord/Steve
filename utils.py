@@ -107,12 +107,6 @@ class Contribution:
     pdf: ti.f32 # type:ignore
 
 @ti.dataclass
-class LightSample:
-    direction: vec3f# type: ignore
-    contrib: vec3f# type: ignore
-    pdf: ti.f32# type: ignore
-
-@ti.dataclass
 class SurfaceLightSample:
     pdf: ti.f32# type: ignore
     point: vec3f# type: ignore

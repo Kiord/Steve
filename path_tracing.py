@@ -3,10 +3,10 @@ from ray import intersect_scene, Ray, Intersection
 from datatypes import vec3f
 from scene import  environment_color
 from camera import make_ray
-from utils import (Contribution, RandomSampler,  pdf_solid_angle_sphere, LightSample)
+from utils import (Contribution, RandomSampler)
 from constants import *
 from bsdf import bsdf_sample, bsdf_pdf
-from emitters import emitter_sample
+from emitters import emitter_sample, pdf_solid_angle
 
 
 class RenderBuffers:
@@ -26,7 +26,6 @@ class RenderBuffers:
 def sample_bsdf_contrib_mis(scene:ti.template(), inter : Intersection, sampler: RandomSampler) -> Contribution:  # type: ignore
     contrib= Contribution(vec3f(0.0, 0.0, 0.0), 0.0)
     mat = scene.materials[inter.material_id]
-    #ds = sample_BSDF(inter.normal, mat, inter.ray.direction, sampler)
     ds = bsdf_sample(mat, inter.normal, inter.ray.direction, sampler)
     pdf_light = 0.0
     if ds.pdf > EPS:
@@ -35,9 +34,11 @@ def sample_bsdf_contrib_mis(scene:ti.template(), inter : Intersection, sampler: 
         mat_check = scene.materials[inter_check.material_id]
         if inter_check.hit == 1 and mat_check.emissive.norm() > 0:
             
-            light_sphere = scene.spheres[inter_check.sphere_id]
+            pdf_light = pdf_solid_angle(scene, inter_check)
 
-            pdf_light = pdf_solid_angle_sphere(light_sphere, inter.point) / scene.num_light_spheres[None]
+            # light_sphere = scene.spheres[inter_check.sphere_id]
+
+            # pdf_light = pdf_solid_angle_sphere(light_sphere, inter.point) / scene.num_light_spheres[None]
 
             cos_theta = inter.normal.dot(ds.direction)
             if cos_theta > 0.0:
@@ -48,18 +49,7 @@ def sample_bsdf_contrib_mis(scene:ti.template(), inter : Intersection, sampler: 
 
 @ti.func
 def sample_light_contrib_mis(scene: ti.template(), inter: Intersection, sampler: RandomSampler):
-    total_lights = scene.num_light_spheres[None] + scene.num_light_triangles[None]
-    ls = LightSample(direction=vec3f(0.0), contrib=vec3f(0.0), pdf=0.0)
-
-    if total_lights > 0:
-        u = sampler.next()
-        light_index = int(u * total_lights)
-
-        emitter_type = EMITTER_SPHERE
-        if light_index >= scene.num_light_spheres[None]:
-            emitter_type = EMITTER_TRIANGLE
-
-        ls = emitter_sample(emitter_type, scene, inter, sampler)
+    ls = emitter_sample(scene, inter, sampler)
 
     # Compute PDF_surface (for BSDF MIS)
     wi = -inter.ray.direction

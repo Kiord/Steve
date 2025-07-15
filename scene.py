@@ -46,6 +46,7 @@ class Sphere:
     center: vec3f # type: ignore
     radius: ti.f32 # type: ignore
     material_id: ti.i32 # type: ignore
+    area: ti.f32 # type: ignore
 
 @ti.dataclass
 class Plane:
@@ -63,6 +64,14 @@ class Triangle:
     n1: vec3f #type:ignore
     n2: vec3f #type:ignore
     material_id: ti.i32 #type:ignore
+    area: ti.f32 #type:ignore
+
+
+@ti.dataclass
+class EmissivePrimitive:
+    index: ti.i32 #type:ignore
+    type: ti.i32 #type:ignore
+    area: ti.f32 #type:ignore
 
 @ti.dataclass
 class PointLight:
@@ -155,11 +164,19 @@ class Scene:
         self.planes = Plane.field(shape=MAX_PLANES)
         self.materials = Material.field(shape=MAX_MATERIALS)
         self.num_materials = ti.field(dtype=ti.i32, shape=())
-        self.num_light_spheres = ti.field(dtype=ti.i32, shape=())
-        self.light_spheres_id = ti.field(dtype=ti.i32, shape=MAX_SPHERES)
+        #self.num_light_spheres = ti.field(dtype=ti.i32, shape=())
+        #self.light_spheres_id = ti.field(dtype=ti.i32, shape=MAX_SPHERES)
 
-        self.num_light_triangles = ti.field(dtype=ti.i32, shape=())
-        self.light_triangles_id = ti.field(dtype=ti.i32, shape=MAX_TRIANGLES)
+        #self.num_light_triangles = ti.field(dtype=ti.i32, shape=())
+        #self.light_triangles_id = ti.field(dtype=ti.i32, shape=MAX_TRIANGLES)
+
+
+        #self.sphere_light_area = ti.field(dtype=ti.f32, shape=MAX_SPHERES)
+        #self.triangle_light_area = ti.field(dtype=ti.f32, shape=MAX_TRIANGLES)
+
+        self.emissive_primitives = EmissivePrimitive.field(shape=MAX_EMITTERS)
+        self.num_emissive_primitives = ti.field(dtype=ti.i32, shape=())
+        self.total_emissive_area = ti.field(dtype=ti.f32, shape=())
 
         self.bvhs = BVHNode.field(shape=(MAX_BVHS, MAX_BVH_NODES))
         self.bvh_infos = BVHInfo.field(shape=(MAX_BVHS))
@@ -192,6 +209,14 @@ class Scene:
     #                                             bsdf_type=bsdf_type)
     #     return material_id
     
+    def _add_emitter(self, idx, emitter_type, area):
+        emitter_idx = self.num_emissive_primitives[None]
+        self.emissive_primitives[emitter_idx].index = idx
+        self.emissive_primitives[emitter_idx].type = emitter_type
+        self.emissive_primitives[emitter_idx].area = area
+        self.total_emissive_area[None] += area
+        self.num_emissive_primitives[None] += 1
+
     def add_material(self, mat: Material):
         mat_id = self.num_materials[None]
         self.materials[mat_id] = mat
@@ -203,11 +228,13 @@ class Scene:
         if idx >= MAX_SPHERES:
             return -1
         self.num_spheres[None] += 1
-        self.spheres[idx] = Sphere(ti.Vector(list(center)), radius, material_id)
+        
+        area = 4.0 * math.pi * radius * radius
+        self.spheres[idx] = Sphere(ti.Vector(list(center)), radius, material_id, area=area)
+        
         if self.materials[material_id].emissive.norm() > 0.0:
-            light_idx = self.num_light_spheres[None]
-            self.num_light_spheres[None] += 1
-            self.light_spheres_id[light_idx] = idx
+            self._add_emitter(idx, EMITTER_SPHERE, area)
+
         return idx
         
     def add_plane(self, point:np.ndarray, normal:np.ndarray, material_id:int):
@@ -237,7 +264,9 @@ class Scene:
         n2 = normal if n2 is None else np.asanyarray(n2)
         if normal.dot(n0 + n1 + n2) < 0:
             normal = -normal
-       
+
+        area = 0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0))
+
         self.triangles[idx] =  Triangle(
             v0=ti.Vector(list(v0)),
             v1=ti.Vector(list(v1)), 
@@ -246,16 +275,16 @@ class Scene:
             n0=ti.Vector(list(n0)),
             n1=ti.Vector(list(n1)),
             n2=ti.Vector(list(n2)),
-            material_id=material_id)
+            material_id=material_id,
+            area=area)
         
         free_idx = self.num_free_triangles[None]
         self.free_triangles[free_idx] = idx
         self.num_free_triangles[None] += 1
 
         if self.materials[material_id].emissive.norm() > 0.0:
-            light_idx = self.num_light_triangles[None]
-            self.light_triangles_id[light_idx] = idx
-            self.num_light_triangles[None] += 1
+            self._add_emitter(idx, EMITTER_TRIANGLE, area)
+
         return idx
 
     def add_quad(self, position, scale, axis, angle, material_id):

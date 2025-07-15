@@ -25,8 +25,8 @@ def setup_spheres_scene(scene:Scene, ffcc:FFCC):
 
     ffcc.set_look_at((3,3,3), (0,0.5,0))
 
-    #scene.add_quad((0,5,0), (3,3,3), (1,0,0), 0, emissive_white)
-    scene.add_sphere((0,5,0),1,emissive_white)
+    scene.add_quad((0,5,0), (3,3,3), (1,0,0), 0, emissive_white)
+    #scene.add_sphere((0,5,0),1,emissive_white)
 
     scene.add_plane([0,0,0], [0,1,0], lambert_white)
 

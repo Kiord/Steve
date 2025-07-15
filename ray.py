@@ -1,7 +1,7 @@
 import taichi as ti
 from scene import Scene, Sphere, Plane, Triangle
 from datatypes import vec3f, mat4f
-from constants import EPS, MAX_DIST
+from constants import *
 
 @ti.dataclass
 class Ray:
@@ -17,10 +17,8 @@ class Intersection:
     t: ti.f32 # type:ignore
     front_face: ti.i32 # type:ignore
     material_id: ti.i32 # type:ignore
-    sphere_id:ti.i32 # type:ignore
-    plane_id : ti.i32 # type:ignore
-    triangle_id : ti.i32 # type:ignore
-    shape_id : ti.i32 # type:ignore  0 sphere, 1 plane, 2 tri 
+    primitive_id:ti.i32 # type:ignore
+    primitive_type : ti.i32 # type:ignore
     ray: Ray
     bvh_depth : ti.int32 # type:ignore
     box_test_count: ti.int32 # type:ignore
@@ -51,17 +49,15 @@ def empty_intersection(ray:Ray) -> Intersection:
         t=MAX_DIST,
         front_face=1,
         material_id=-1,
-        sphere_id=-1,
-        plane_id=-1,
-        triangle_id=-1,
-        shape_id=-1,
+        primitive_id=-1,
+        primitive_type=PRIMITIVE_NONE,
         ray=ray,
         bvh_depth=0,
         box_test_count=0,
     )               
 
 @ti.func
-def ray_sphere_intersection(ray: Ray, sphere: Sphere, inter: ti.template(), sphere_id: ti.i32, t_min:ti.f32, t_max:ti.f32):  # type: ignore
+def ray_sphere_intersection(ray: Ray, sphere: Sphere, inter: ti.template(), primitive_id: ti.i32, t_min:ti.f32, t_max:ti.f32):  # type: ignore
     oc = ray.origin - sphere.center
     a = ray.direction.dot(ray.direction)
     b = oc.dot(ray.direction)
@@ -86,11 +82,11 @@ def ray_sphere_intersection(ray: Ray, sphere: Sphere, inter: ti.template(), sphe
             inter.front_face = front_face
             inter.material_id = sphere.material_id
             inter.hit = 1
-            inter.sphere_id = sphere_id  # optional for light ID or reuse
-            inter.shape_id = 0
+            inter.primitive_id = primitive_id  # optional for light ID or reuse
+            inter.primitive_type = PRIMITIVE_SPHERE
 
 @ti.func
-def ray_plane_intersection(ray: Ray, plane: Plane, inter: ti.template(), plane_id: ti.i32, t_min: ti.f32, t_max: ti.f32):  # type: ignore
+def ray_plane_intersection(ray: Ray, plane: Plane, inter: ti.template(), primitive_id: ti.i32, t_min: ti.f32, t_max: ti.f32):  # type: ignore
     denom = ray.direction.dot(plane.normal)
     if ti.abs(denom) > 1e-6:  # not parallel
         t = (plane.point - ray.origin).dot(plane.normal) / denom
@@ -108,8 +104,8 @@ def ray_plane_intersection(ray: Ray, plane: Plane, inter: ti.template(), plane_i
             inter.front_face = front_face
             inter.material_id = plane.material_id
             inter.hit = 1
-            inter.plane_id = plane_id  # optional
-            inter.shape_id = 1
+            inter.primitive_id = primitive_id  # optional
+            inter.primitive_type = PRIMITIVE_PLANE
 
 @ti.func
 def ray_triangle_intersection(ray: Ray, tri: Triangle, inter: ti.template(), tri_id: ti.i32, t_min: ti.f32, t_max: ti.f32, bvh_depth:ti.i32=0):  # type: ignore
@@ -149,8 +145,8 @@ def ray_triangle_intersection(ray: Ray, tri: Triangle, inter: ti.template(), tri
                     inter.front_face = front_face
                     inter.material_id = tri.material_id
                     inter.hit = 1
-                    inter.triangle_id = tri_id
-                    inter.shape_id = 2
+                    inter.primitive_id = tri_id
+                    inter.primitive_type = PRIMITIVE_TRIANGLE
                     inter.bvh_depth = bvh_depth
 
 @ti.func
@@ -273,8 +269,8 @@ def ray_bvhs_intersection(ray: Ray, bvhs:ti.template(), bvh_infos:ti.template(),
             inter.front_face = 1 if ray.direction.dot(inter.normal_geom) < 0 else 0
             inter.material_id = inter_local.material_id
             inter.hit = 1
-            inter.triangle_id = inter_local.triangle_id
-            inter.shape_id = 2
+            inter.primitive_id = inter_local.primitive_id
+            inter.primitive_type = PRIMITIVE_TRIANGLE
             inter.bvh_depth = inter_local.bvh_depth
 
 @ti.func
@@ -286,8 +282,8 @@ def ray_scene_intersection(ray: Ray, scene: ti.template(), inter:ti.template(), 
         ray_plane_intersection(ray, scene.planes[i], inter, i, t_min, t_max)
 
     for i in range(scene.num_free_triangles[None]):
-        triangle_id = scene.free_triangles[i]
-        ray_triangle_intersection(ray, scene.triangles[triangle_id], inter, i, t_min, t_max)
+        primitive_id = scene.free_triangles[i]
+        ray_triangle_intersection(ray, scene.triangles[primitive_id], inter, i, t_min, t_max)
 
     ray_bvhs_intersection(ray, scene.bvhs, scene.bvh_infos, scene.num_bvhs[None], scene.triangles, inter, t_min, t_max)
 
