@@ -30,15 +30,15 @@ def D_GGX(N: vec3f, H: vec3f, alpha: ti.f32) -> ti.f32:
     return a2 / (ti.math.pi * denom * denom + EPS)
 
 @ti.func
-def G1(N: vec3f, V: vec3f, alpha: ti.f32)-> ti.f32:
-    NoV = ti.max(N.dot(V), 0.0)
-    tan_theta = ti.sqrt(1.0 - NoV * NoV) / ti.max(NoV, EPS)
-    a = 1.0 / (alpha * tan_theta + EPS)
-    return 2.0 * NoV / (NoV + ti.sqrt(a * a + 1.0))
+def G1_GGX(N: vec3f, V: vec3f, alpha: ti.f32) -> ti.f32:
+    NoV = ti.max(N.dot(V), EPS)
+    tan_theta = ti.sqrt(1.0 - NoV * NoV) / NoV
+    a = alpha * tan_theta
+    return 2.0 / (1.0 + ti.sqrt(1.0 + a * a))
 
 @ti.func
-def G_Smith(N: vec3f, V: vec3f, L: vec3f, alpha: ti.f32) -> ti.f32:
-    return G1(N, V, alpha) * G1(N, L, alpha)
+def G_Smith_GGX(N: vec3f, V: vec3f, L: vec3f, alpha: ti.f32) -> ti.f32:
+    return G1_GGX(N, V, alpha) * G1_GGX(N, L, alpha)
 
 # -------------------------------------------------------------------------
 #  INTERFACE FUNCTIONS (to be used by path tracer)
@@ -62,6 +62,8 @@ def bsdf_eval(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> vec3f:
         result = eval_lambert(material, normal, wi, wo)
     elif material.bsdf_type == BSDF_PHONG:
         result = eval_phong(material, normal, wi, wo)
+    elif material.bsdf_type == BSDF_GGX:
+        result = eval_ggx(material, normal, wi, wo)
     return result
 
 @ti.func
@@ -71,6 +73,8 @@ def bsdf_pdf(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> ti.f32:
         result = pdf_lambert(material, normal, wi, wo)
     elif material.bsdf_type == BSDF_PHONG:
         result = pdf_phong(material, normal, wi, wo)
+    elif material.bsdf_type == BSDF_GGX:
+        result = pdf_ggx(material, normal, wi, wo)
     return result
 
 
@@ -144,45 +148,48 @@ def pdf_phong(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> ti.f32
 @ti.func
 def sample_ggx(material: Material, normal: vec3f, incoming: vec3f, sampler) -> DirectionSample:
     ds = empty_direction_sample()
-
     alpha = material.roughness * material.roughness
 
-    # Sample GGX half-vector in local space
+    V = -incoming.normalized()
+
+    # Construct ONB around V
+    w = V
+    a = vec3f(0.0, 1.0, 0.0) if ti.abs(w.x) > 0.9 else vec3f(1.0, 0.0, 0.0)
+    v = w.cross(a).normalized()
+    u = v.cross(w)
+
     u1, u2 = sampler.next2()
     phi = 2.0 * ti.math.pi * u1
     cos_theta = ti.sqrt((1.0 - u2) / (1.0 + (alpha * alpha - 1.0) * u2))
     sin_theta = ti.sqrt(1.0 - cos_theta * cos_theta)
 
-    H = vec3f(
+    H_local = vec3f(
         sin_theta * ti.cos(phi),
         sin_theta * ti.sin(phi),
         cos_theta
     )
 
-    # Transform H to world space
-    w = normal.normalized()
-    a = vec3f(0.0, 1.0, 0.0) if ti.abs(w.x) > 0.9 else vec3f(1.0, 0.0, 0.0)
-    v = w.cross(a).normalized()
-    u = v.cross(w)
-    H = (u * H.x + v * H.y + w * H.z).normalized()
+    H = (u * H_local.x + v * H_local.y + w * H_local.z).normalized()
 
-    # Reflect incoming vector around H
-    V = -incoming.normalized()
+    # Ensure H is in same hemisphere as normal
+    H = ti.select(normal.dot(H) < 0.0, -H, H)
+
     L = reflect(-V, H).normalized()
 
     NoV = ti.max(normal.dot(V), EPS)
     NoL = ti.max(normal.dot(L), EPS)
     VoH = ti.max(V.dot(H), EPS)
+    NoH = ti.max(normal.dot(H), EPS)
 
-    if NoL > 0:
+    if NoL > 0.0:
         D = D_GGX(normal, H, alpha)
-        G = G_Smith(normal, V, L, alpha)
+        G = G_Smith_GGX(normal, V, L, alpha)
         F = fresnel_schlick(VoH, material.albedo)
 
-        spec = D * G * F / (4.0 * NoV * NoL + EPS)
-        pdf = D * NoL / (4.0 * VoH + EPS)
+        bsdf = D * G * F / (4.0 * NoV * NoL + EPS)
+        pdf = D * NoH / (4.0 * VoH + EPS)
 
-        ds = DirectionSample(direction=L, pdf=pdf, bsdf=spec)
+        ds = DirectionSample(direction=L, pdf=pdf, bsdf=bsdf)
 
     return ds
 
@@ -190,24 +197,35 @@ def sample_ggx(material: Material, normal: vec3f, incoming: vec3f, sampler) -> D
 def eval_ggx(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> vec3f:
     alpha = material.roughness * material.roughness
     H = (wi + wo).normalized()
+
     NoV = ti.max(normal.dot(wi), EPS)
     NoL = ti.max(normal.dot(wo), EPS)
     VoH = ti.max(wi.dot(H), EPS)
+    NoH = ti.max(normal.dot(H), EPS)
 
     result = vec3f(0.0)
 
-    if NoL > 0 and NoV > 0:
+    if NoV > 0 and NoL > 0:
         D = D_GGX(normal, H, alpha)
-        G = G_Smith(normal, wi, wo, alpha)
+        G = G_Smith_GGX(normal, wi, wo, alpha)
         F = fresnel_schlick(VoH, material.albedo)
         result = D * G * F / (4.0 * NoV * NoL + EPS)
+
     return result
+
 
 @ti.func
 def pdf_ggx(material: Material, normal: vec3f, wi: vec3f, wo: vec3f) -> ti.f32:
-    H = (wi + wo).normalized()
     alpha = material.roughness * material.roughness
-    D = D_GGX(normal, H, alpha)
+    H = (wi + wo).normalized()
+
     VoH = ti.max(wi.dot(H), EPS)
     NoH = ti.max(normal.dot(H), EPS)
-    return D * NoH / (4.0 * VoH + EPS)
+    D = D_GGX(normal, H, alpha)
+
+    # Only compute PDF if directions are valid
+    NoV = normal.dot(wi)
+    NoL = normal.dot(wo)
+    is_valid = ti.cast(NoV > 0 and NoL > 0, ti.f32)
+
+    return is_valid * D * NoH / (4.0 * VoH + EPS)
