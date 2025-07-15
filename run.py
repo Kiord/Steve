@@ -51,10 +51,10 @@ def cli(profiling, denoising, tone_mapping, size, spp, max_depth, arch):
     camera_controller = FreeFlyCameraController(state)
     camera_controller.update_camera_field(camera)
 
-    #setup_spheres_scene(scene, camera_controller)
+    setup_spheres_scene(scene, camera_controller)
     #setup_veach_scene(scene, camera_controller)
     #setup_cornell_scene(scene, camera_controller)
-    setup_suzanne_scene(scene, camera_controller)
+    #setup_suzanne_scene(scene, camera_controller)
     #setup_dragon_scene(scene, camera_controller)
     #setup_scene(scene)
     #build_ui(state)
