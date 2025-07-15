@@ -204,24 +204,28 @@ def setup_suzanne_scene(scene:Scene, ffcc:FFCC):
     # plotter.add_mesh(mesh)
     # plotter.add_arrows(mesh.vertices, mesh.vertex_normals, mag=0.1)
     # plotter.show()
-    diffuse_white = scene.add_material([1,1,1],[0,0,0], 0)
+    diffuse_white = scene.add_material(create_lambert([1,1,1]))
+    emissive_white = scene.add_material(create_lambert([0,0,0], [1,1,1]))
+
+    diffuse_ids = np.full(len(mesh.faces), diffuse_white, dtype=np.int32)
+    emissive_ids = np.full(len(mesh.faces), emissive_white, dtype=np.int32)
 
     #scene.add_mesh(mesh, diffuse_white)
-    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white)
+    scene.add_mesh_bvh(mesh, bvh_dict, emissive_ids)
     t = np.array([
         [1, 0, 0, 2],
         [0, 1, 0, 0],
         [0, 0, 1, 0],
         [0, 0, 0, 1],
     ], dtype=np.float32)
-    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white, t)
+    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_ids, t)
     t = np.array([
         [0, 1, 0, 1],
         [1, 0, 0, 0],
         [0, 0, 1, 2],
         [0, 0, 0, 1],
     ], dtype=np.float32)
-    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white, t)
+    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_ids, t)
 
     t = np.array([
         [2, 0, 0, 0],
@@ -229,7 +233,12 @@ def setup_suzanne_scene(scene:Scene, ffcc:FFCC):
         [0, 0, 1, 4],
         [0, 0, 0, 1],
     ], dtype=np.float32)
-    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_white, t)
+    scene.add_mesh_bvh(mesh, bvh_dict, diffuse_ids, t)
+
+    scene.ground_color[None] = ti.Vector([0, 0, 0])
+    scene.horizon_color[None] = ti.Vector([0, 0, 0])
+    scene.sky_color[None] = ti.Vector([0, 0, 0])
+    scene.sun_color[None] = ti.Vector([0, 0, 0])
 
 def setup_dragon_scene(scene:Scene, ffcc:FFCC):
     # Camera

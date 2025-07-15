@@ -107,7 +107,7 @@ def upload_free_triangles(
 
 @ti.kernel
 def upload_triangles(
-    triangles: ti.template(),   # type: ignore
+    scene: ti.template(),   # type: ignore
     offset: ti.i32, count: ti.i32,  # type: ignore 
     v0: ti.types.ndarray(), # type: ignore
     v1: ti.types.ndarray(), # type: ignore
@@ -116,18 +116,28 @@ def upload_triangles(
     n0: ti.types.ndarray(), # type: ignore
     n1: ti.types.ndarray(), # type: ignore
     n2: ti.types.ndarray(), # type: ignore
-    material_id: ti.types.ndarray() # type: ignore
+    areas: ti.types.ndarray(), # type: ignore
+    material_ids: ti.types.ndarray() # type: ignore
 ):
     for i in range(count):
         j = offset + i
-        triangles.v0[j] = ti.Vector([v0[i, 0], v0[i, 1], v0[i, 2]], dt=ti.f32)
-        triangles.v1[j] = ti.Vector([v1[i, 0], v1[i, 1], v1[i, 2]], dt=ti.f32)
-        triangles.v2[j] = ti.Vector([v2[i, 0], v2[i, 1], v2[i, 2]], dt=ti.f32)
-        triangles.normal[j] = ti.Vector([n[i, 0], n[i, 1], n[i, 2]], dt=ti.f32)
-        triangles.n0[j] = ti.Vector([n0[i, 0], n0[i, 1], n0[i, 2]], dt=ti.f32)
-        triangles.n1[j] = ti.Vector([n1[i, 0], n1[i, 1], n1[i, 2]], dt=ti.f32)
-        triangles.n2[j] = ti.Vector([n2[i, 0], n2[i, 1], n2[i, 2]], dt=ti.f32)
-        triangles.material_id[j] = material_id[i]
+        scene.triangles.v0[j] = ti.Vector([v0[i, 0], v0[i, 1], v0[i, 2]], dt=ti.f32)
+        scene.triangles.v1[j] = ti.Vector([v1[i, 0], v1[i, 1], v1[i, 2]], dt=ti.f32)
+        scene.triangles.v2[j] = ti.Vector([v2[i, 0], v2[i, 1], v2[i, 2]], dt=ti.f32)
+        scene.triangles.normal[j] = ti.Vector([n[i, 0], n[i, 1], n[i, 2]], dt=ti.f32)
+        scene.triangles.n0[j] = ti.Vector([n0[i, 0], n0[i, 1], n0[i, 2]], dt=ti.f32)
+        scene.triangles.n1[j] = ti.Vector([n1[i, 0], n1[i, 1], n1[i, 2]], dt=ti.f32)
+        scene.triangles.n2[j] = ti.Vector([n2[i, 0], n2[i, 1], n2[i, 2]], dt=ti.f32)
+        scene.triangles.material_id[j] = material_ids[i]
+        scene.triangles.area[j] = areas[i]
+
+        if scene.materials[material_ids[i]].emissive.norm() > 0.0:
+            emitter_idx = scene.num_emissive_primitives[None]
+            scene.emissive_primitives[emitter_idx].index = j
+            scene.emissive_primitives[emitter_idx].type = EMITTER_TRIANGLE
+            scene.emissive_primitives[emitter_idx].area = areas[i]
+            scene.total_emissive_area[None] += areas[i]
+            scene.num_emissive_primitives[None] += 1
 
 @ti.kernel
 def upload_bvh(
@@ -334,11 +344,12 @@ class Scene:
         mid = np.full((Nt,), material_id, dtype=np.int32)
         triangle_ids = np.arange(tri_offset, tri_offset + Nt, dtype=np.int32)
 
-        upload_triangles(self.triangles, tri_offset, Nt, v0, v1, v2, n, n0, n1, n2, mid)
+
+        upload_triangles(self, tri_offset, Nt, v0, v1, v2, n, n0, n1, n2, mesh.area_faces, mid)
         upload_free_triangles(self.free_triangles, free_tri_offset, Nt, triangle_ids)
 
 
-    def add_mesh_bvh(self, mesh:tm.Trimesh, bvh_dict:dict, material_id:int, transform:np.ndarray=None):
+    def add_mesh_bvh(self, mesh:tm.Trimesh, bvh_dict:dict, material_ids:np.ndarray, transform:np.ndarray=None):
         bvh_id = self.num_bvhs[None]
         Nt = len(mesh.faces)
         tri_offset = self.num_triangles[None]
@@ -372,10 +383,9 @@ class Scene:
         n0 = face_vertex_normals[:, 0]
         n1 = face_vertex_normals[:, 1]
         n2 = face_vertex_normals[:, 2]
-        mid = np.full((Nt,), material_id, dtype=np.int32)
 
-        upload_triangles(self.triangles, tri_offset, Nt, v0[torder], v1[torder], v2[torder], n[torder], 
-                         n0[torder], n1[torder], n2[torder], mid[torder])
+        upload_triangles(self, tri_offset, Nt, v0[torder], v1[torder], v2[torder], n[torder], 
+                         n0[torder], n1[torder], n2[torder], mesh.area_faces[torder], material_ids[torder])
 
 
         upload_bvh(self.bvhs, bvh_id, Nn, is_leaf, left_or_start, right_or_count, aabb_min, aabb_max, depth)

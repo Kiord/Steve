@@ -76,7 +76,7 @@ class FreeFlyCameraController:
             self.pitch = max(self.pitch - self.turn_speed * dt, -89.0)
         
         if gui.is_pressed("g"):
-            self.app_state.mode_id = (self.app_state.mode_id + 1) % RENDER_NUM_MODES
+            self.app_state.mode_id = (self.app_state.mode_id + 1) % NUM_RENDER_MODES
             print(f'Mode : {RENDER_MODE_NAMES[self.app_state.mode_id]}')
         
 
