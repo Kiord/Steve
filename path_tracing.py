@@ -101,7 +101,14 @@ def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSa
 
     for bounce in range(max_depth):
         inter = intersect_scene(ray, scene, 0, MAX_DIST)
+        mat = scene.materials[inter.material_id]
 
+        if bounce == 0:
+            aux_albedo = mat.albedo
+            aux_normal = inter.normal
+            aux_depth = inter.t
+            aux_bvh_depth = inter.bvh_depth
+        
         if bounce == 0:
             aux_box_test_count = inter.box_test_count
 
@@ -111,22 +118,20 @@ def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSa
             if bounce == 0:
                 aux_albedo = env_color
             break
-
-        mat = scene.materials[inter.material_id]
+        
 
         contrib = vec3f(0,0,0)
         use_emissive = mat.emissive.norm() > 0 and bounce == 0
         if use_emissive:
             contrib = mat.emissive
-        else:
-            if mat.emissive.norm() == 0:
-                w_light, light_contrib, w_bsdf, bsdf_contrib = sample_direct_mis_contrib(scene, inter, sampler)
-                contrib = w_light * light_contrib + w_bsdf * bsdf_contrib
-                aux_mis_weights[0] += w_light 
-                aux_mis_weights[1] += w_bsdf
-                aux_direct_light += light_contrib * prod_ratio
-                aux_direct_bsdf += bsdf_contrib * prod_ratio
-         
+        elif mat.emissive.norm() == 0:
+            w_light, light_contrib, w_bsdf, bsdf_contrib = sample_direct_mis_contrib(scene, inter, sampler)
+            contrib = w_light * light_contrib + w_bsdf * bsdf_contrib
+            aux_mis_weights[0] += w_light 
+            aux_mis_weights[1] += w_bsdf
+            aux_direct_light += light_contrib * prod_ratio
+            aux_direct_bsdf += bsdf_contrib * prod_ratio
+        
         result += prod_ratio * contrib
 
         # Russian roulette after a few bounces
@@ -150,12 +155,6 @@ def path_trace(scene: ti.template(), ray: Ray, max_depth: int, sampler: RandomSa
         # Update ray
         ray.origin = inter.point + inter.normal_geom * EPS
         ray.direction = ds.direction
-
-        if bounce == 0:
-            aux_albedo = mat.albedo
-            aux_normal = inter.normal
-            aux_depth = inter.t
-            aux_bvh_depth = inter.bvh_depth
 
     return result, aux_mis_weights, aux_direct_light, aux_direct_bsdf, aux_albedo, aux_normal, aux_depth, aux_bvh_depth, aux_box_test_count
 

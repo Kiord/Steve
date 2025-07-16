@@ -16,12 +16,14 @@ def setup_spheres_scene(scene:Scene, ffcc:FFCC):
 
     shininesses = [1, 10, 50, 150, 500, 2000]
     roughnesses = [0.01, 0.05, 0.15, 0.3, 0.5, 0.8]
+    roughnesses.reverse()
 
     scene.add_sphere((0,0.5,0), 0.5, lambert_white)
 
     for i in range(6):
         scene.add_sphere((1,0.5,i-6//2), 0.5, scene.add_material(create_phong([1,1,1], shininesses[i])))
         scene.add_sphere((-1,0.5,i-6//2), 0.5, scene.add_material(create_ggx([1,1,1], roughnesses[i])))
+        #scene.add_sphere((-1,0.5,i-6//2), 0.5, scene.add_material(create_phong([1,1,1], shininesses[i])))
 
     ffcc.set_look_at((3,3,3), (0,0.5,0))
 
@@ -53,7 +55,7 @@ def setup_veach_scene(scene:Scene, ffcc:FFCC):
     # y -> x
     # z -> y
     scene.add_quad(scene_scale * 50.0 * np.array([0,-0.5,0]),  [scene_scale * 50.0] * 2, [1,0,0], 0, diffuse_white)
-    scene.add_quad(scene_scale * 50.0 * np.array([0, 0, 0.5]), [scene_scale * 50.0] * 2, [1,0,0], 0.5 * math.pi, emissive_white)
+    scene.add_quad(scene_scale * 50.0 * np.array([0, 0, 0.5]), [scene_scale * 50.0] * 2, [1,0,0], 0.5 * math.pi, diffuse_white)
 
     # // Spheres
     sphere_colors = [(1.0,0.1,0.1),(0.2,1.0,0.4),(1,0.15,1.0),(0.1,0.3, 1.0)]

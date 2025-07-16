@@ -24,10 +24,14 @@ def fresnel_schlick(cos_theta, F0: vec3f) -> vec3f:
 
 @ti.func
 def D_GGX(N: vec3f, H: vec3f, alpha: ti.f32) -> ti.f32:
-    NoH = ti.max(N.dot(H), 0.0)
+    NoH = ti.max(N.dot(H), 1e-4)
     a2 = alpha * alpha
-    denom = NoH * NoH * (a2 - 1.0) + 1.0
-    return a2 / (ti.math.pi * denom * denom + EPS)
+    s = a2 - 1.0
+    NoH2 = NoH * NoH
+    denom = ti.max(NoH2 * s + 1.0, EPS)
+    denom2 = denom * denom
+    D = a2 / (ti.math.pi * denom2 + EPS)
+    return D
 
 @ti.func
 def G1_GGX(N: vec3f, V: vec3f, alpha: ti.f32) -> ti.f32:
@@ -155,41 +159,45 @@ def sample_ggx(material: Material, normal: vec3f, incoming: vec3f, sampler) -> D
     # Construct ONB around V
     w = V
     a = vec3f(0.0, 1.0, 0.0) if ti.abs(w.x) > 0.9 else vec3f(1.0, 0.0, 0.0)
-    v = w.cross(a).normalized()
-    u = v.cross(w)
+    v = w.cross(a)
+    if v.norm() > EPS:
+        v = v.normalized()
+        u = v.cross(w)
 
-    u1, u2 = sampler.next2()
-    phi = 2.0 * ti.math.pi * u1
-    cos_theta = ti.sqrt((1.0 - u2) / (1.0 + (alpha * alpha - 1.0) * u2))
-    sin_theta = ti.sqrt(1.0 - cos_theta * cos_theta)
+        u1, u2 = sampler.next2()
+        phi = 2.0 * ti.math.pi * u1
+        cos_theta = ti.sqrt((1.0 - u2) / (1.0 + (alpha * alpha - 1.0) * u2))
+        sin_theta = ti.sqrt(1.0 - cos_theta * cos_theta)
 
-    H_local = vec3f(
-        sin_theta * ti.cos(phi),
-        sin_theta * ti.sin(phi),
-        cos_theta
-    )
+        H_local = vec3f(
+            sin_theta * ti.cos(phi),
+            sin_theta * ti.sin(phi),
+            cos_theta
+        )
 
-    H = (u * H_local.x + v * H_local.y + w * H_local.z).normalized()
+        H = (u * H_local.x + v * H_local.y + w * H_local.z)
+        if H.norm() > EPS:
+            H = H.normalized()
 
-    # Ensure H is in same hemisphere as normal
-    H = ti.select(normal.dot(H) < 0.0, -H, H)
+            # Ensure H is in same hemisphere as normal
+            H = ti.select(normal.dot(H) < 0.0, -H, H)
 
-    L = reflect(-V, H).normalized()
+            L = reflect(-V, H).normalized()
 
-    NoV = ti.max(normal.dot(V), EPS)
-    NoL = ti.max(normal.dot(L), EPS)
-    VoH = ti.max(V.dot(H), EPS)
-    NoH = ti.max(normal.dot(H), EPS)
+            NoV = ti.max(normal.dot(V), EPS)
+            NoL = ti.max(normal.dot(L), EPS)
+            VoH = ti.max(V.dot(H), EPS)
+            NoH = ti.max(normal.dot(H), EPS)
 
-    if NoL > 0.0:
-        D = D_GGX(normal, H, alpha)
-        G = G_Smith_GGX(normal, V, L, alpha)
-        F = fresnel_schlick(VoH, material.albedo)
+            if NoL > 0.0:
+                D = D_GGX(normal, H, alpha)
+                G = G_Smith_GGX(normal, V, L, alpha)
+                F = fresnel_schlick(VoH, material.albedo)
 
-        bsdf = D * G * F / (4.0 * NoV * NoL + EPS)
-        pdf = D * NoH / (4.0 * VoH + EPS)
+                bsdf = D * G * F / (4.0 * NoV * NoL + EPS)
+                pdf = D * NoH / (4.0 * VoH + EPS)
 
-        ds = DirectionSample(direction=L, pdf=pdf, bsdf=bsdf)
+                ds = DirectionSample(direction=L, pdf=pdf, bsdf=bsdf)
 
     return ds
 
