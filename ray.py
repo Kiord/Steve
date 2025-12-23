@@ -283,7 +283,7 @@ def ray_scene_intersection(ray: Ray, scene: ti.template(), inter:ti.template(), 
 
     for i in range(scene.num_free_triangles[None]):
         primitive_id = scene.free_triangles[i]
-        ray_triangle_intersection(ray, scene.triangles[primitive_id], inter, i, t_min, t_max)
+        ray_triangle_intersection(ray, scene.triangles[primitive_id], inter, primitive_id, t_min, t_max)
 
     ray_bvhs_intersection(ray, scene.bvhs, scene.bvh_infos, scene.num_bvhs[None], scene.triangles, inter, t_min, t_max)
 
