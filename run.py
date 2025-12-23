@@ -1,6 +1,5 @@
 import click
 import taichi as ti
-import dearpygui.dearpygui as dpg
 import numpy as np
 
 from scene import Scene
@@ -11,7 +10,6 @@ from tone_mapping import tone_map, tone_map_into
 from control import FreeFlyCameraController
 from timer import FrameTimer
 from app_state import AppState
-from ui import build_ui
 from sample_scenes import setup_veach_scene, setup_suzanne_scene, setup_dragon_scene, setup_cornell_scene, setup_spheres_scene
 from constants import *
 
