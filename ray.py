@@ -165,7 +165,7 @@ def ray_aabb_intersection_test(ray, aabb_min, aabb_max, t_min, t_max):
     hit = True
 
     for i in ti.static(range(3)):
-        inv_d = 1.0 / ray.direction[i]
+        inv_d = 1.0 / (ray.direction[i] + EPS)
         t_near = (aabb_min[i] - ray.origin[i]) * inv_d
         t_far = (aabb_max[i] - ray.origin[i]) * inv_d
 
@@ -187,7 +187,7 @@ def ray_aabb_intersection_test(ray, aabb_min, aabb_max, t_min, t_max):
 @ti.func
 def ray_bvhs_intersection(ray: Ray, bvhs:ti.template(), bvh_infos:ti.template(), num_bvhs:ti.int32, triangles:ti.template(), inter:ti.template(), t_min: ti.f32, t_max: ti.f32): # type: ignore
     
-    stack = ti.Vector([0 for _ in range(64)])  # fixed-size stack
+    stack = ti.Vector([0 for _ in range(256)])  # fixed-size stack
     for bvh_id in range(num_bvhs):
         stack_ptr = 0
         stack[0] = 0  # start from BVH root
