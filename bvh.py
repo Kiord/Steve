@@ -589,7 +589,7 @@ def print_bvh_summary(bvh_dict):
         r = right_child[node_id]
         if l != -1 and r != -1:
             left_area = compute_surface_area(aabb_min[l], aabb_max[l])
-            right_area = compute_surface_area(aabb_max[r], aabb_max[r])
+            right_area = compute_surface_area(aabb_min[r], aabb_max[r])
             if parent_area > 0:
                 area_ratios.append((left_area + right_area) / parent_area)
         if l != -1:
